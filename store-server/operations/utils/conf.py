@@ -71,4 +71,4 @@ DEFAULT_INIT_REGIONS = [
     "aws:eu-north-1",
 ]
 
-DEFAULT_SKYSTORE_BUCKET_PREFIX = "skystore"
+DEFAULT_SKYSTORE_BUCKET_PREFIX = "skystore-gvernik"
