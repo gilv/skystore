@@ -147,7 +147,7 @@ impl SkyProxy {
                 "http://127.0.0.1:3000".to_string()
             } else {
                 // NOTE: ip address set to be the remote store-server addr
-                "http://18.144.171.244:3000".to_string()
+                "http://54.183.96.176:3000".to_string()
             },
             ..Default::default()
         };
@@ -775,6 +775,10 @@ impl S3 for SkyProxy {
         req: S3Request<PutObjectInput>,
     ) -> S3Result<S3Response<PutObjectOutput>> {
         // Idempotent PUT
+        println!("Into to put object");
+        println!("{}",req.input.bucket.clone());
+        println!("{}",req.input.key.clone());
+        println!("{}",self.client_from_region.clone());
         let locator = self
             .locate_object(req.input.bucket.clone(), req.input.key.clone())
             .await?;
@@ -784,7 +788,7 @@ impl S3 for SkyProxy {
                 ..Default::default()
             }));
         }
-
+        println!("1");
         let start_upload_resp = apis::start_upload(
             &self.dir_conf,
             models::StartUploadRequest {
@@ -804,11 +808,13 @@ impl S3 for SkyProxy {
         let locators = start_upload_resp.locators;
         let request_template = clone_put_object_request(&req.input, None);
         let input_blobs = split_streaming_blob(req.input.body.unwrap(), locators.len());
-
+        println!("Got locators response from server");
         locators
             .into_iter()
             .zip(input_blobs.into_iter())
             .for_each(|(locator, input_blob)| {
+                println!("{}",locator.key.clone());
+                println!("{}",locator.bucket.clone());
                 let conf = self.dir_conf.clone();
                 let client: Arc<Box<dyn ObjectStoreClient>> =
                     self.store_clients.get(&locator.tag).unwrap().clone();
