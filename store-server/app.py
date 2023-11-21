@@ -138,15 +138,6 @@ async def startup():
 
     task = asyncio.create_task(rm_lock_on_timeout())
     background_tasks.add(task)
-    resp = app.post(
-        "/start_create_bucket",
-        json={
-            "bucket": "gilv-bucket-op",
-            "client_from_region": "aws:us-west-2",
-        },
-    )
-    resp.raise_for_status()
-
 
 
 @app.get("/healthz")
