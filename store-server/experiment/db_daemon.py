@@ -14,7 +14,7 @@ class App():
     def run(self):
         while True:
             db_replicator.run()
-            time.sleep(100)
+            time.sleep(300)
 
 app = App()
 with daemon.DaemonContext():
