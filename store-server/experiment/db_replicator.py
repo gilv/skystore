@@ -37,7 +37,7 @@ def db_replicator(db_file, skystore_prefix, dest_region):
 
 
 
-if __name__ == '__main__':
+def run():
 
     src_region = ""
     config_file = os.path.join(os.path.expanduser('~'), 'skystore-host.config')
@@ -66,3 +66,6 @@ if __name__ == '__main__':
             f = open(state_file, "w")
             f.write(str(db_last_update))
             f.close()
+
+if __name__ == '__main__':
+    run()
