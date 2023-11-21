@@ -11,3 +11,5 @@ sqlalchemy_repr
 rich
 jq
 greenlet
+boto3
+python-daemon
