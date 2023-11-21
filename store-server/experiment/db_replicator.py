@@ -33,6 +33,18 @@ def db_replicator(db_file, skystore_prefix, dest_region):
         s3_client.head_bucket(Bucket=dst_bucket)
         s3_client.upload_file(db_file, dst_bucket, 'skystore.db')
     except ClientError as e:
+        response = s3_client.create_bucket(
+            Bucket=dst_bucket,
+            CreateBucketConfiguration={
+                'LocationConstraint': dest_region,
+                },
+            )
+        print(e)
+
+    try:
+        s3_client.head_bucket(Bucket=dst_bucket)
+        s3_client.upload_file(db_file, dst_bucket, 'skystore.db')
+    except ClientError as e:
         print(e)
 
 
