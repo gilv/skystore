@@ -71,6 +71,7 @@ impl SkyProxy {
         } else {
             // Real object store configuration (regions: init regions)
             for r in regions {
+                println!("{}",r);
                 let split: Vec<&str> = r.splitn(2, ':').collect();
                 let (provider, region) = (split[0], split[1]);
 
@@ -93,6 +94,7 @@ impl SkyProxy {
                 store_clients.insert(r.to_string(), client_arc.clone());
                 // if bucket not exists, create one
                 let skystore_bucket_name = format!("{}-{}", skystore_bucket_prefix, region);
+                println!("{}", skystore_bucket_name.clone()) ;
                 let bucket_region = if provider == "aws" || provider == "gcp" {
                     Some(region.to_string())
                 } else {
@@ -147,7 +149,7 @@ impl SkyProxy {
                 "http://127.0.0.1:3000".to_string()
             } else {
                 // NOTE: ip address set to be the remote store-server addr
-                "http://54.183.96.176:3000".to_string()
+                "http://13.52.247.45:3000".to_string()
             },
             ..Default::default()
         };
