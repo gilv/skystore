@@ -1,9 +1,11 @@
 import asyncio
+import os
+import httpx
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from sqlalchemy import select, update
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from operations.utils.conf import Base
 from operations.schemas.object_schemas import (
@@ -27,6 +29,7 @@ app.include_router(object_operations_router)
 stop_task_flag = asyncio.Event()
 background_tasks = set()
 
+secondary_ip = ''
 
 async def rm_lock_on_timeout(minutes: int = 10, test: bool = False):
     # initial wait to prevent first check which should never run
@@ -131,6 +134,15 @@ async def shutdown_event():
 
 @app.on_event("startup")
 async def startup():
+
+    config_file = os.path.join(os.path.expanduser('~'), 'skystore-secondary.config')
+
+    # get secondary_ip
+    if os.path.isfile(config_file):
+        f = open(config_file, "r")
+        secondary_ip = f.read()
+        f.close()
+    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # await conn.exec_driver_sql("pragma journal_mode=memory")
@@ -143,6 +155,31 @@ async def startup():
 @app.get("/healthz")
 async def healthz() -> HealthcheckResponse:
     return HealthcheckResponse(status="OK")
+
+async def duplicate_request(request: Request):
+    secondary = f'{secondary_ip}:3000'
+    client = httpx.AsyncClient(base_url=f'http://{secondary}/')
+    #url = httpx.URL(path="/users/")
+    print (request.url.path)
+    new_headers = list(request.headers.raw)
+    new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
+    req = client.build_request(
+        request.method, request.url.path, headers=new_headers, content=request.stream()
+    )
+    print (req)
+    r = await client.send(req)
+    print (r)
+    return r
+    
+
+
+@app.middleware("http")
+async def wrap_request(request: Request, call_next):
+    print ("before")
+    response = await call_next(request)
+    print ("after")
+    r = await duplicate_request(request)
+    return response
 
 
 ## Add routes above this function
