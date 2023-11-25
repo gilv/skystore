@@ -19,6 +19,7 @@ from operations.bucket_operations import router as bucket_operations_router
 from operations.object_operations import router as object_operations_router
 from operations.utils.db import engine
 
+import logging
 
 app = FastAPI()
 
@@ -135,7 +136,11 @@ async def shutdown_event():
 @app.on_event("startup")
 async def startup():
 
+    logging.basicConfig(filename=os.path.join(os.path.expanduser('~'),'server.log'), encoding='utf-8', level=logging.DEBUG)
+    logging.info("Server startup")
+
     config_file = os.path.join(os.path.expanduser('~'), 'skystore-secondary.config')
+    logging.info("Config path %s", config_file)
 
     # get secondary_ip
     if os.path.isfile(config_file):
