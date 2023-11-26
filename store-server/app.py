@@ -187,7 +187,22 @@ async def wrap_request(request: Request, call_next):
     print (app.secondary_ip)
     response = await call_next(request)
     print ("after")
-    r = await duplicate_request(request)
+    secondary = str(app.secondary_ip) + ':3000'
+    print (secondary)
+    print (app.secondary_ip)
+    client = httpx.AsyncClient(base_url=f'http://{secondary}/')
+    #url = httpx.URL(path="/users/")
+    print (request.url.path)
+    new_headers = list(request.headers.raw)
+    new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
+    req = client.build_request(
+        request.method, request.url.path, headers=new_headers, content=request.stream()
+    )
+    print (req)
+    r = await client.send(req)
+    print (r)
+    return r
+
     return response
 
 
