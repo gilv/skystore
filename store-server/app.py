@@ -164,7 +164,7 @@ async def healthz() -> HealthcheckResponse:
     return HealthcheckResponse(status="OK")
 
 async def duplicate_request(request: Request):
-    secondary = f'{app.secondary_ip}:3000'
+    secondary = str(app.secondary_ip) + ':3000'
     print (secondary)
     client = httpx.AsyncClient(base_url=f'http://{secondary}/')
     #url = httpx.URL(path="/users/")
@@ -184,6 +184,7 @@ async def duplicate_request(request: Request):
 @app.middleware("http")
 async def wrap_request(request: Request, call_next):
     print ("before")
+    print (app.secondary_ip)
     response = await call_next(request)
     print ("after")
     r = await duplicate_request(request)
