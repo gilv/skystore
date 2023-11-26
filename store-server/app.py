@@ -30,7 +30,7 @@ app.include_router(object_operations_router)
 stop_task_flag = asyncio.Event()
 background_tasks = set()
 
-secondary_ip = ''
+app.secondary_ip = ''
 
 async def rm_lock_on_timeout(minutes: int = 10, test: bool = False):
     # initial wait to prevent first check which should never run
@@ -146,8 +146,9 @@ async def startup():
     # get secondary_ip
     if os.path.isfile(config_file):
         f = open(config_file, "r")
-        secondary_ip = f.read()
+        app.secondary_ip = f.read()
         f.close()
+        print (app.secondary_ip)
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -163,7 +164,8 @@ async def healthz() -> HealthcheckResponse:
     return HealthcheckResponse(status="OK")
 
 async def duplicate_request(request: Request):
-    secondary = f'{secondary_ip}:3000'
+    secondary = f'{app.secondary_ip}:3000'
+    print (secondary)
     client = httpx.AsyncClient(base_url=f'http://{secondary}/')
     #url = httpx.URL(path="/users/")
     print (request.url.path)
