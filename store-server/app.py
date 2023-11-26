@@ -183,18 +183,19 @@ async def duplicate_request(request: Request):
 @app.middleware("http")
 async def wrap_request(request: Request, call_next):
     response = await call_next(request)
-    secondary = str(app.secondary_ip) + ':3000'
-    client = httpx.AsyncClient(base_url=f'http://{secondary}/')
-    print (request.url.path)
-    new_headers = list(request.headers.raw)
-    new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
-    req = client.build_request(
-        request.method, request.url.path, headers=new_headers, content=request.stream()
-    )
-    print (req)
-    r = await client.send(req)
-    print("secondary meta data server request completed")
-
+    if app.secondary_ip != '':
+        secondary = str(app.secondary_ip) + ':3000'
+        client = httpx.AsyncClient(base_url=f'http://{secondary}/')
+        print (request.url.path)
+        new_headers = list(request.headers.raw)
+        new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
+        req = client.build_request(
+            request.method, request.url.path, headers=new_headers, content=request.stream()
+        )
+        print (req)
+        r = await client.send(req)
+        print("secondary meta data server request completed")
+    
     return response
 
 
