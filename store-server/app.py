@@ -136,7 +136,7 @@ async def shutdown_event():
 @app.on_event("startup")
 async def startup():
 
-    logging.basicConfig(filename=os.path.join(os.path.expanduser('~'),'server.log'), filemode='w', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename='server.log', filemode='w', encoding='utf-8', level=logging.DEBUG)
 
     logger=logging.getLogger()
     logger.info("welcome")
