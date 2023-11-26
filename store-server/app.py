@@ -146,7 +146,7 @@ async def startup():
     # get secondary_ip
     if os.path.isfile(config_file):
         f = open(config_file, "r")
-        app.secondary_ip = f.read()
+        app.secondary_ip = f.read().replace('\n','')
         f.close()
         print (app.secondary_ip)
     
