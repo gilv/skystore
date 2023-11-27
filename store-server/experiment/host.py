@@ -67,12 +67,8 @@ def create_instance(
 
     # validate arguments
     region = "us-west-1"
-    region_backup = ''
+    region_backup = AWS_BACKUP_ZONES.get(region, None)
     aws_region_list = [region]
-    if SECONDARY_MODE and enable_aws:
-        region_backup = AWS_BACKUP_ZONES.get(region, None)
-        # bug, need to make sure VPC is created in the second region
-        aws_region_list = [region]
     # validate AWS regions
     aws_region_list = aws_region_list if enable_aws else []
     azure_region_list = azure_region_list if enable_azure else []
