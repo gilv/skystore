@@ -6,12 +6,21 @@ from skyplane.compute.const_cmds import make_sysctl_tcp_tuning_command
 from skyplane.utils import logger
 from skyplane.utils.fn import do_parallel
 from skyplane.compute.aws.aws_auth import AWSAuthentication
+from pickle import NONE
 
 all_aws_regions = compute.AWSCloudProvider.region_list()
 all_azure_regions = compute.AzureCloudProvider.region_list()
 all_gcp_regions = compute.GCPCloudProvider.region_list()
 all_gcp_regions_standard = compute.GCPCloudProvider.region_list_standard()
 all_ibmcloud_regions = compute.IBMCloudProvider.region_list()
+
+AWS_BACKUP_ZONES = {
+    "us-west-1":"us-west-2",
+    "us-east-1":"us-east-2",
+    "eu-south-1":"eu-south-2",
+    }
+
+SECONDARY_MODE = True
 
 
 def aws_credentials():
@@ -57,8 +66,13 @@ def create_instance(
         assert tup[1].strip() == "", f"Command failed, err: {tup[1]}"
 
     # validate arguments
-    aws_region_list = ["us-west-1"]
-
+    region = "us-west-1"
+    region_backup = ''
+    aws_region_list = [region]
+    if SECONDARY_MODE and enable_aws:
+        region_backup = AWS_BACKUP_ZONES.get(region, None)
+        # bug, need to make sure VPC is created in the second region
+        aws_region_list = [region]
     # validate AWS regions
     aws_region_list = aws_region_list if enable_aws else []
     azure_region_list = azure_region_list if enable_azure else []
@@ -128,6 +142,8 @@ def create_instance(
         aws_instance_os="ubuntu",
         gcp_instance_os="ubuntu",
         gcp_use_premium_network=True,
+        backup_server=SECONDARY_MODE,
+        backup_server_region=region_backup
     )
     instance_list: List[compute.Server] = [
         i for ilist in aws_instances.values() for i in ilist
@@ -135,6 +151,12 @@ def create_instance(
     instance_list.extend([i for ilist in azure_instances.values() for i in ilist])
     instance_list.extend([i for ilist in gcp_instances.values() for i in ilist])
 
+    # find secondary IP
+    secondary_ip = ''
+    for ins in instance_list:
+        if 'skystore-secondary' in ins.instance_name():
+            secondary_ip = ins.public_ip()
+    print (f"secondary server ip found {secondary_ip}")
     with open("ssh_cmd.txt", "a") as f:
         for instance in instance_list:
             print("instance: ", instance.region_tag)
@@ -152,7 +174,7 @@ def create_instance(
 
     # setup instances
     def setup(server: compute.Server):
-        print("Setting up instance: ", server.region_tag)
+        print(f"Setting up instance: {server.instance_name()}  - {server.region_tag}")
         check_stderr(
             server.run_command(
                 "echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections"
@@ -173,6 +195,9 @@ def create_instance(
             f"aws configure set aws_access_key_id {aws_credentials()[0]};\
             aws configure set aws_secret_access_key {aws_credentials()[1]}"
         )
+        server.run_command(
+            f"echo '{server.region_tag}' > skystore-host.config"
+        )
 
         # Set up other stuff
         # install cargo
@@ -182,6 +207,15 @@ def create_instance(
             pip3 install -r requirements.txt; /home/ubuntu/.cargo/bin/cargo install just --force; \
             nohup python3.9 -m uvicorn app:app --reload --host 0.0.0.0 --port 3000 > /dev/null 2>&1 &"
         )
+
+        if 'skystore-primary' in server.instance_name():
+            server.run_command("chmod +x ~/skystore/store-server/experiment/db_daemon.py; \
+                ~/skystore/store-server/experiment/db_daemon.py start")
+            if secondary_ip != "":
+                server.run_command(
+                    f"echo '{secondary_ip}' > skystore-secondary.config"
+                )
+
 
     do_parallel(setup, instance_list, spinner=True, n=-1, desc="Setup")
 

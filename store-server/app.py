@@ -135,13 +135,7 @@ async def shutdown_event():
 
 @app.on_event("startup")
 async def startup():
-
-    logging.basicConfig(filename='server.log', filemode='w', encoding='utf-8', level=logging.DEBUG)
-
-    logger=logging.getLogger()
-    logger.info("welcome")
     config_file = os.path.join(os.path.expanduser('~'), 'skystore-secondary.config')
-    logger.info("Config path %s", config_file)
 
     # get secondary_ip
     if os.path.isfile(config_file):
@@ -162,40 +156,42 @@ async def startup():
 async def healthz() -> HealthcheckResponse:
     return HealthcheckResponse(status="OK")
 
-async def duplicate_request(request: Request):
+async def duplicate_request(request: Request, body:str):
+    print ("duplicate request")
     secondary = str(app.secondary_ip) + ':3000'
-    print (secondary)
     client = httpx.AsyncClient(base_url=f'http://{secondary}/')
-    #url = httpx.URL(path="/users/")
     print (request.url.path)
     new_headers = list(request.headers.raw)
     new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
+
     req = client.build_request(
-        request.method, request.url.path, headers=new_headers, content=request.stream()
+        request.method, request.url.path, headers=new_headers, content=body
     )
     print (req)
     r = await client.send(req)
-    print (r)
+    print ("secondary meta data server request completed")
     return r
-    
 
+
+async def set_body(request: Request, body: bytes):
+    async def receive():
+        return {"type": "http.request", "body": body}
+    request._receive = receive
+
+async def get_body(request: Request) -> bytes:
+    body = await request.body()
+    await set_body(request, body)
+    return body
 
 @app.middleware("http")
 async def wrap_request(request: Request, call_next):
+    await set_body(request, await request.body())
+    body = await get_body(request)
     response = await call_next(request)
     if app.secondary_ip != '':
-        secondary = str(app.secondary_ip) + ':3000'
-        client = httpx.AsyncClient(base_url=f'http://{secondary}/')
-        print (request.url.path)
-        new_headers = list(request.headers.raw)
-        new_headers[0]=(b'host', bytes(secondary, 'utf-8'))
-        req = client.build_request(
-            request.method, request.url.path, headers=new_headers, content=request.stream()
-        )
-        print (req)
-        r = await client.send(req)
+        resp = await duplicate_request(request, body)
         print("secondary meta data server request completed")
-    
+
     return response
 
 
