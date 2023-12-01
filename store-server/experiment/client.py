@@ -13,7 +13,6 @@ import time
 from datetime import datetime
 
 all_aws_regions = compute.AWSCloudProvider.region_list()
-print (all_aws_regions)
 all_azure_regions = compute.AzureCloudProvider.region_list()
 all_gcp_regions = compute.GCPCloudProvider.region_list()
 all_gcp_regions_standard = compute.GCPCloudProvider.region_list_standard()
@@ -156,7 +155,7 @@ def create_instance(
             + [f"gcp:{region}" for region in gcp_region_list]
             + [f"ibmcloud:{region}" for region in ibmcloud_region_list],
             "client_from_region": server.region_tag,
-            "skystore_bucket_prefix": "skystore-gvernik",
+            "skystore_bucket_prefix": "skystore",
             "policy": "write_local",
         }
         config_file_path = f"/tmp/init_config_{server.region_tag}.json"
@@ -187,7 +186,7 @@ def create_instance(
         )
 
         # Set up other stuff
-        url = "https://github.com/gilv/skystore.git"
+        url = "https://github.com/skyplane-project/skystore.git"
         clone_cmd = f"git clone {url}; cd skystore; "
         cmd1 = f"sudo apt remove python3-apt -y; sudo apt autoremove -y; \
                 sudo apt autoclean; sudo apt install python3-apt -y; sudo apt-get update; \
