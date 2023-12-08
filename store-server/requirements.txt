@@ -13,3 +13,10 @@ jq
 greenlet
 boto3
 python-daemon
+numpy
+pandas
+networkx
+asyncpg
+psycopg2
+sqlalchemy_utils
+filelock

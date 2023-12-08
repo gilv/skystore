@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
@@ -17,13 +18,14 @@ from operations.utils.conf import Base, Status, Configuration
 class DBLogicalBucket(Base):
     __tablename__ = "logical_buckets"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    bucket = Column(String)
+    id = Column(Integer, primary_key=True, autoincrement=True, unique=True)
+    bucket = Column(String, unique=True)
     prefix = Column(String)
 
     # NOTE: do we need status per logical bucket?
     status = Column(Enum(Status))
     creation_date = Column(DateTime)
+    version_enabled = Column(Boolean)
 
     # Add relationship to physical bucket
     physical_bucket_locators = relationship(
@@ -33,16 +35,17 @@ class DBLogicalBucket(Base):
     # Add relationship to logical object
     logical_objects = relationship("DBLogicalObject", back_populates="logical_bucket")
 
+    __table_args__ = (Index("ix_logical_buckets_bucket_status", "bucket", "status"),)
+
 
 class DBPhysicalBucketLocator(Base):
     __tablename__ = "physical_bucket_locators"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-
+    id = Column(Integer, primary_key=True, autoincrement=True, unique=True)
     location_tag = Column(String)
     cloud = Column(String)
     region = Column(String)
-    bucket = Column(String)
+    bucket = Column(String, unique=True)
     prefix = Column(String, default="")
 
     lock_acquired_ts = Column(DateTime, nullable=True, default=None)
@@ -96,6 +99,7 @@ class BucketResponse(BaseModel):
 class RegisterBucketRequest(BaseModel):
     bucket: str
     config: Configuration
+    versioning: bool
 
 
 class CreateBucketRequest(LocateBucketRequest):
@@ -122,3 +126,8 @@ class DeleteBucketResponse(CreateBucketResponse):
 
 class DeleteBucketIsCompleted(BaseModel):
     id: int
+
+
+class PutBucketVersioningRequest(BaseModel):
+    bucket: str
+    versioning: bool

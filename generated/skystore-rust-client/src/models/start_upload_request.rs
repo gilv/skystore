@@ -16,14 +16,14 @@ pub struct StartUploadRequest {
     pub key: String,
     #[serde(rename = "client_from_region")]
     pub client_from_region: String,
+    #[serde(rename = "version_id", skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<i32>,
     #[serde(rename = "is_multipart")]
     pub is_multipart: bool,
     #[serde(rename = "copy_src_bucket", skip_serializing_if = "Option::is_none")]
     pub copy_src_bucket: Option<String>,
     #[serde(rename = "copy_src_key", skip_serializing_if = "Option::is_none")]
     pub copy_src_key: Option<String>,
-    #[serde(rename = "policy", skip_serializing_if = "Option::is_none")]
-    pub policy: Option<String>,
 }
 
 impl StartUploadRequest {
@@ -37,10 +37,10 @@ impl StartUploadRequest {
             bucket,
             key,
             client_from_region,
+            version_id: None,
             is_multipart,
             copy_src_bucket: None,
             copy_src_key: None,
-            policy: None,
         }
     }
 }
