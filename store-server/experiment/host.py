@@ -148,11 +148,16 @@ def create_instance(
     instance_list.extend([i for ilist in gcp_instances.values() for i in ilist])
 
     # find secondary IP
-    secondary_ip = ''
+    secondary_hot_ip = ''
+    secondary_cold_ip = ''
     for ins in instance_list:
-        if 'skystore-secondary' in ins.instance_name():
-            secondary_ip = ins.public_ip()
-    print (f"secondary server ip found {secondary_ip}")
+        if 'skystore-secondary-hot' in ins.instance_name():
+            secondary_hot_ip = ins.public_ip()
+        if 'skystore-secondary-cold' in ins.instance_name():
+            secondary_cold_ip = ins.public_ip()
+ 
+    print (f"secondary hot server ip found {secondary_hot_ip}")
+    print (f"secondary cold server ip found {secondary_cold_ip}")
     with open("ssh_cmd.txt", "a") as f:
         for instance in instance_list:
             print("instance: ", instance.region_tag)
@@ -205,11 +210,19 @@ def create_instance(
         )
 
         if 'skystore-primary' in server.instance_name():
-            server.run_command("chmod +x ~/skystore/store-server/experiment/db_daemon.py; \
-                ~/skystore/store-server/experiment/db_daemon.py start")
-            if secondary_ip != "":
+            #server.run_command("chmod +x ~/skystore/store-server/experiment/db_daemon.py; \
+            #    ~/skystore/store-server/experiment/db_daemon.py start")
+            if secondary_hot_ip != "":
                 server.run_command(
-                    f"echo '{secondary_ip}' > skystore-secondary.config"
+                    f"echo '{secondary_hot_ip}' > skystore-secondary-hot.config"
+                )
+
+        if 'skystore-secondary-hot' in server.instance_name():
+            #server.run_command("chmod +x ~/skystore/store-server/experiment/db_daemon.py; \
+            #    ~/skystore/store-server/experiment/db_daemon.py start")
+            if secondary_cold_ip != "":
+                server.run_command(
+                    f"echo '{secondary_cold_ip}' > skystore-secondary-cold.config"
                 )
 
 
