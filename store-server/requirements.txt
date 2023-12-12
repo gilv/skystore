@@ -17,6 +17,6 @@ numpy
 pandas
 networkx
 asyncpg
-psycopg2
+psycopg2-binary
 sqlalchemy_utils
 filelock
