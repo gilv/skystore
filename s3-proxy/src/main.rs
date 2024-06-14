@@ -161,7 +161,7 @@ async fn main() {
         });
 
     // Run server
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8002));
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8002));
     info!("Starting server on {}", addr);
     hyper::Server::bind(&addr)
         .serve(tower::make::Shared::new(service))
