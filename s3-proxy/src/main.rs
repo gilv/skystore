@@ -85,8 +85,8 @@ async fn main() {
         // let mut b = S3ServiceBuilder::new(proxy);
         let mut b = S3ServiceBuilder::new(proxy.clone());
         // Enable authentication
-        let access_key = std::env::var("AWS_ACCESS_KEY_ID").expect("ACCESS_KEY must be set");
-        let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").expect("SECRET_KEY must be set");
+        let access_key = std::env::var("SKY_ACCESS_KEY_ID").expect("ACCESS_KEY must be set");
+        let secret_key = std::env::var("SKY_SECRET_ACCESS_KEY").expect("SECRET_KEY must be set");
         b.set_auth(SimpleAuth::from_single(access_key, secret_key));
 
         // Configure virtual-host style domain?
