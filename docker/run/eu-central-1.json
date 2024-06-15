@@ -1,0 +1,10 @@
+{
+ "init_regions": [
+   "aws:eu-central-1",
+   "aws:eu-west-1"
+  ],
+ "client_from_region": "aws:eu-central-1",
+ "skystore_bucket_prefix": "skystore-extract",
+ "policy": "write_local",
+ "server_addr": "127.0.0.1"
+}
