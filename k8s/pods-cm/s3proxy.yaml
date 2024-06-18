@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: skystore-s3proxy
+spec:
+  containers:
+    - name: skystore-s3proxy-container
+      image: quay.io/erezh_ibm/skystore-s3proxy
+      ports:
+      - containerPort: 8002
+      envFrom:
+      - configMapRef:
+          name: conf-s3proxy
+  restartPolicy: Never
+  imagePullSecrets:
+  - name: regcred
+
