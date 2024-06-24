@@ -7,7 +7,7 @@ chmod 600 $HOME/.ssh/id_rsa
 chown -R $USER:$USER $HOME/.ssh
 
 # Set up SSH tunnel - skystore server address must be specified and valid
-/usr/bin/ssh -o "StrictHostKeyChecking no" -L 3000:localhost:3000 -N -f $SSH_USERNAME@$SKYSTORE_SRV_ADDR
+/usr/bin/ssh -p $SSH_PORT -o "StrictHostKeyChecking no" -L 3000:localhost:3000 -N -f $SSH_USERNAME@$SKYSTORE_SRV_ADDR
 if [[ $? -ne 0 ]]; then
     echo "Could not establish SSH tunnel to: $SSH_USERNAME@$SKYSTORE_SRV_ADDR"
     exit 1

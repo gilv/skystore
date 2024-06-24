@@ -3,6 +3,7 @@ FROM skystore-base:latest
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV SSH_USERNAME=extract
+ENV SSH_PORT=22
 ENV PASSWORD=mysecretpassword
 ENV SKYSTORE_SRV_ADDR="" 
 ENV SKYSTORE_PRV_KEY=""
