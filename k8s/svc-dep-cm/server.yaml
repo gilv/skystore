@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: per
+  name: skystore-server
+  labels:
+    app.kubernetes.io/name: skystore-server
+spec:
+  containers:
+    - name: skystore-server-container
+      # Change image URL as needed 
+      image: registry.gitlab.bsc.es/extract/extract-sa/skystore/skystore-server
+      ports:
+      - containerPort: 22
+        name: skystore-svc
+      envFrom:
+      - configMapRef:
+          name: conf-skystore-server
+  # Change or remove serviceAccountName as needed
+  serviceAccountName: sa-extract
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: per
+  name: skystore-service
+spec:
+  # Change to ClusterIP / NodePort - as needed
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: skystore-server
+  ports:
+  - name: skystore-service-port
+    protocol: TCP
+    port: 32222
+    targetPort: skystore-svc
+

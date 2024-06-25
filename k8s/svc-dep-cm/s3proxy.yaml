@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: per
+  name: skystore-s3proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector: 
+    matchLabels:
+      app.kubernetes.io/name: skystore-s3proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: skystore-s3proxy
+    spec:
+      containers:
+      - name: skystore-s3proxy-container
+        # Change image URL as needed
+        image: registry.gitlab.bsc.es/extract/extract-sa/skystore/skystore-s3proxy
+        ports:
+        - containerPort: 8002
+          name: s3proxy-svc
+        envFrom:
+        - configMapRef:
+            name: conf-skystore-s3proxy
+      # Change or remove serviceAccountName as needed
+      serviceAccountName: sa-extract
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: per
+  name: s3proxy-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: skystore-s3proxy
+  ports:
+  - name: s3proxy-port
+    protocol: TCP
+    port: 8002
+    targetPort: s3proxy-svc
+
+
