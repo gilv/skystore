@@ -5,4 +5,4 @@ if ! [ -f "$1" ]; then
 fi
 
 
-kubectl create configmap conf-skystore-server --from-env-file=$1
+kubectl create configmap conf-skystore-s3proxy --from-env-file=$1
