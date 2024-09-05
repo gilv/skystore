@@ -10,7 +10,7 @@ spec:
       - containerPort: 22
       envFrom:
       - configMapRef:
-          name: conf-server
+          name: conf-skystore-server
   restartPolicy: Never
   imagePullSecrets:
   - name: regcred

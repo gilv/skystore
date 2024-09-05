@@ -73,3 +73,6 @@ just run-registry
 just run-sample-push
 just run-sample-pull
 ```
+
+## Docker and Kubernetes Deyployment
+For an orderly deployment of Sky Store in containers, in Docker or Kubernetes clusters, please see [here](CONTAINER.md)

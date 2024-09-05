@@ -10,7 +10,7 @@ spec:
       - containerPort: 8002
       envFrom:
       - configMapRef:
-          name: conf-s3proxy
+          name: conf-skystore-s3proxy
   restartPolicy: Never
   imagePullSecrets:
   - name: regcred
