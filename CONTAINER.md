@@ -1,11 +1,24 @@
 # Deploying SkyStore in Docker or in Kubernetes
 
 ## Overview
+SkyStore can be deployed in containerized form, using either Docker or Kubernetes. In eithee case, there are two types of components: the SkyStore metadata server (location DB) and the SkyStore S3-Proxy, which facilitates client usage of SkyStore. Each of these is created as as one or more containers from a common base image, and the added plumbing revolves around connectivity and configuration. 
+
+Notes:
+1. *Security*: SkyStore communication is currently plaintext HTTP. To harden the internal communication between S3-Proxy and the central server, we wrap it in an SSH tunnel (so S3-Proxy connects to SSH port of server IP). As for S3-proxy communication to client, it is standard S3 protocol, which has built-in support for TLS hardening, and this will be a next step.
+2. *Configuration*: while the central metadata server of SkyStore has relatively simple and fixed configuration, each S3-proxy can be configured differently in terms of which S3 to connect to, policy to employ etc. Because of that, the deployment process and tooling inherently support different configurations, as detailed below.
+
+### SkyStore in Docker
+The Docker deployment of SkyStore is basically a proof-of-concept of containerized deployment. It is not intended for future production use. There is no support for multi-cluster or scaling os S3-proxy.It is a simple 1-node cluster (e.g., your laptop) for experimenting with and debugging SkyStore in container form. In this setup, we deploy one container of SkyStore (metadata / location DB) server, and one or more containers of S3-proxy, each configured separately using Docker env files. Clients connect to service exported from S3-proxy containers. See the diagram below.
+![](skystore_docker.svg "SkyStore in Docker") 
+
+### SkyStore in Kubernetes
+This form of deployment is intended for future production use of SkyStore. It uses the same container images and configuration env files that should be prepared for SkyStore in Docker deployment. However, deploying in Kubernetes already supports scaling of S3-proxy for handling scalability, as well as deploying across multiple Kubernetes clusters. The SkyStore (metadata / location DB) server is deployed as a Service in one cluster and obtains an IP address that is accessible to all clusters (e.g., using Ingress / LoadBalancer / NodePort). For now, this service is not scalable as it relies on a single pod. All S3-proxies are deployed as scalable services whose pods connect to the server pod. The scheme below desribes one possible deployment of multiple S3-proxy services connected to a SkyStore service, 2 in the same premise (cloud region / VPC / cluster) and one in a different premise. 
+![](skystore_k8s.svg "SkyStore in Kubernetes")
 
 ## How to deploy
-Please follow the sub-sections in order, but according to your goal. Even if you intend you deploy on Kubernees, you may still need to first build the Docker images and env files.
+Please follow the sub-sections in order, but according to your goal. Even if you intend you deploy on Kubernees, you still need to have the container images and env files.
 
-### Get the container images
+### 1. Get the container images
 Before deploying containers (either Docker or K8s) you need to have the container images. There are 3 images: 
 * `skystore-base` - is the common base layer with full skystore installation
 * `skystore-server` - is the skystore metadata server
@@ -27,10 +40,10 @@ cd docker/build
 ```
 Replace `<registry prefix>` with the prefix required for the target registry.
 
-### Prepare Env Files
+### 2. Prepare Env Files
 When running SkyStore containers, there are several configuration arguments that need to be passed to either the metadata server or each s3-proxy server. Those arguments are first created as Docker env files, which can be readily used for deploying containers using Docker. If using K8s, env files can be further converted to Config Maps or Secrets.
 
-#### Create SSH Keypair
+#### 2.1 Create SSH Keypair
 To prepare env files for a new deployment of SkyStore, you first need to create the keypair that secures the SSH tunnel between the metadata server and the s3-proxy servers. Starting from the repo root, do the following commands:
 ```bash
 cd docker/run
@@ -38,7 +51,7 @@ cd docker/run
 ```
 This creates a sub-folder `docker/run/keys` that contains the keypair. The public key is going to be stored in the metadata server and the private key is going to be stored in each s3-proxy server, so that the keys can be used to create an SSH tunnel from the s3-proxy server to the metadata server.
 
-#### Create Server Env File 
+#### 2.2 Create Server Env File 
 Next, you should create the env file for the metadata server. The env file is created in a sub-folder under `docker/run` that will contain all the necessary configuration. A good name for this sub-folder can be the chosen name of your new SkyStore deployment with suffix `-server`, e.g. `myskystore-server`. After you select the deployment name, do the following starting at the repo root:
 ```bash
 cd docker/run
@@ -54,7 +67,7 @@ Now that all the configuration is in the folder, you can create the environment 
 ```
 The resulting environment file for the server is called `env.final` in the same sub-folder that you created.
 
-#### Create S3-Proxy Env File(s)
+#### 2.3 Create S3-Proxy Env File(s)
 Next, you need to create one env file for each s3-proxy server that uses a *different* configuration, such as different S3 backend or different S3-proxy policy. *Good practice:* if you're deploying multiple configurations, prepare a unique suffix (with no white space) for each one, e.g., `-cloud-eu`, `-edge-read-only`, or simply `-3`. 
 
 Similar to the server env file, each s3-proxy env file is created in a separate sub-folder of `docker/run`. In accordance with the server env file, a good name for this folder should be the SkyStore deployment name, followed by `-s3proxy` and then followed by the suffix that you prepared for that configuration, e.g.,  `myskystore-s3proxy-cloud-eu`. Thus, you run the following (starting from repo root):
@@ -83,14 +96,14 @@ Important:
 * You need to repeat the s3proxy env file creation for each different S3-Proxy configuration, depending on your application.
 * For Docker and other dynamic setups where the IP address of the metadata server is not known before deployment, you need to update the `SKYSTORE_SRV_ADDRR` in the `env.final` file of all s3-proxy configurations of your SkyStore deployment after the metadata server is deployed and assigned an IP address.
 
-### Plan & Execute a SkyStore Deployment
+### 2.4 Plan & Execute a SkyStore Deployment
 Now that you have your images and env files, you need to plan your deployment. You can have a single SkyStore deployment in one cluster (Docker) or across one or more clusters (K8s). In each cluster, you can have one or multiple s3-proxy configurations. The only limitations you should consider are:
-* The metadata server is deployed only once, but needs to be accessible to all S3-proxy. Thus, if you're using multiple clusters, make sure the metadata server's IP address and SSH port are accessible to all clusters.
+* The metadata server is deployed only once, but needs to be reached by all S3-proxy. Thus, if you're using multiple clusters, make sure the metadata server's IP address and SSH port are accessible to all clusters.
 * Basic Docker does not allow horizontal scaling containers. Hence, horizontal scaling of s3-proxy is enabled only in K8s. For now, there is manual scaling using K8s Deployment, but we plan to add auto-scaling and/or side-cars in the future.
 
-Next, we discuss two main deployment options: a Docker deployment in a single cluster and a K8s deployment (single or multiple clusters). 
+Next, we discuss two main deployment options: In Section 3, a Docker deployment in a single cluster. In Section 4, a K8s deployment (single or multiple clusters). Choose one of the options and proceed. 
  
-### Docker Deployment
+### 3. Docker Deployment
 To deploy SkyStore on Docker you need to do the following:
 1. If the container images are available in a remote registry, make sure your `docker` tool is logged in to the remote registry.
 2. Run these commands (from repo root) to launch the metadata server in a container:
@@ -114,7 +127,7 @@ Then, for each s3-proxy instance you wish to run, do:
 ```
 Where `<path to env file>` points to the `env.final` of the selected s3-proxy configuration and `<registry prefix>` is as above.
 
-#### Testing & Using Docker Deployment
+#### 3.1 Testing & Using Docker Deployment
 1. Use `docker logs` on the metadata server container UUID to make sure the server was properly started - the log output should be similar to the process exeucution, telling that the server has started and listening on port 3000
 2. Use `docker ps` and `docker logs` to locate each S3-proxy container UUID (`skystore-s3proxy`) and to see that it did not fail to connect (via SSH tunnel) to the metadata server and then start itself, listening on port 8002
 3. A Linux host connected to the container network (172.X.X.X) can be used to test each S3-proxy using e.g. AWS CLI, and configuring a profile in `~/.aws/config` such as the following:
@@ -137,18 +150,18 @@ aws s3api --profile s3proxy <AWS S3 commands: create-bucket, list-buckets, put-o
 Container applications in the Docker cluster can now begin to use SkyStore by connecting to specific S3-proxy with AWS S3 profile configurations in the client containers similar to the previous step. 
 
 
-### Kubernetes Deployment
+### 4. Kubernetes Deployment
 To deploy SkyStore in K8s, make sure of the following:
 1. The SkyStore images must be stored in a container registry that your clusters can access. Credentials for the container registry (if needed) can be in a K8s Secret (e.g., `regcred`) or configured in a K8s ServiceAccount. 
 2. All the contexts of the clusters you wish to use in this deployment should be available on the machine you are deploying from.
 3. Choose a namespace to be used for deploying SkyStore in each K8scluster. Preferrably, it should be the same namespace in all clusters.
 
-#### Select Type of Deployment
+#### 4.1 Select Type of Deployment
 Currently, there are 2 supported types of deployments, named by the respective sub-folder of `k8s/run` of repo root. Choose which type you want to deploy:
 1. `pods-cm` - this is the basic deployment, limited to a single cluster. The metadata server and S3-proxies are implemented each as a single pod, each with its own config map (CM). No scaling of S3-Proxy.
 2. `svc-dep-cm` - this is the more advanced deployment, for a single cluster or for multiple clusters. The metadata server is a K8s Service, so it can be made visible outside the cluster (i.e., accessible to other clusters). Additionally, each S3-Proxy is a K8s Service on a K8s Deployment. Thus, it has a fixed internal IP address for access that is load-balanced across multiple pods. Also, it can be scaled out or in (manually, for now) and restarted in case of failure. It can also be externalized just like the metadata server, but that's not really an expected use (since client applications are likely be pods in the same cluster as well).
 
-#### Prepare YAMLs
+#### 4.2 Prepare YAMLs
 After you've selected the appropriate type of K8s deployment, `cd` into its matching sub-folder of `k8s/run` from repo root. There you will find 2 YAML example files (`server` and `s3proxy`) that you need to copy and customize into your concrete YAMLs, as following.
 1. `server.yaml.example` - This is the metadata server deployment YAML. First, copy it into a concrete YAML, e.g., `cp server.yaml.example server.yaml`. Then, open `server.yaml` with a text editor and modify the following:
     * Change the `namespace:` values to the namespace name that you chose for this deployment
@@ -161,7 +174,7 @@ After you've selected the appropriate type of K8s deployment, `cd` into its matc
     * There are lines that handle container registry credentials. These are either `imagePullSecrets:` line followed by `- name:` in the next line, or `serviceAccountName:` followed by the Service Account name in the same line. If your container registry does not require crednetials, remove those lines. If you have crednetials in either a Secret or SA, then change to the approriate form.
     * There are several lines that have the field `name:` or a field that ends with `name:`. In all those lines (except the optional container registry credentials name), if you have more than one configuration, change the corresponding name value as following: after the word `s3proxy`, insert the unique suffix of that specific configuration. Thus, a line like `name: s3proxy-port` would change to `name: s3proxy-3-port`, and a line like `app.kubernetes.io/name: skystore-s3proxy` would change to `app.kubernetes.io/name: skystore-s3proxy-3`.  
 
-#### Create Config Maps and Deploy
+#### 4.3 Create Config Maps and Deploy
 Configuring the SkyStore containers is currently supported via K8s Config Maps (CMs). Those CMs are created from the Docker env files that you prepared earlier. As a good practice, each CM pertaining to a given server/s3proxy needs to be created prior to the actual server/s3proxy being launched, so that the launched pods should not be pending. 
 1. Create the server CM and launch the server. Make sure your `kubectl` tool is connected to the cluster where you need to deploy the metadata server, and that the current namespace is the one chosen for SkyStore deployment. Now run the following (from repo root):
 ```bash
@@ -201,7 +214,7 @@ Then, for each S3-proxy configuration for that cluster, do:
 kubectl apply -f s3proxy-<configuration suffix>.yaml
 ```
 
-#### Testing & Using K8s Deployment
+#### 4.4 Testing & Using K8s Deployment
 1. Use `kubectl logs` on the metadata server pod to make sure the server was properly started - the log output should be similar to the process exeucution, telling that the server has started and listening on port 3000
 2. Use `kubectl get pods` and `kubectl logs` to locate each S3-proxy pod (`skystore-s3proxy`) and to see in its logs that it did not fail to connect (via SSH tunnel) to the metadata server and then start itself, listening on port 8002
 3. A Linux host with `kubectl` connected to any of the K8s clusters can be used to test each S3-proxy service using e.g. AWS CLI, and configuring a profile in `~/.aws/config` such as the following:
