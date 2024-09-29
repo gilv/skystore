@@ -1,5 +1,7 @@
-/usr/bin/curl https://sh.rustup.rs -sSf | /bin/sh -s -- -y
+/usr/bin/curl https://sh.rustup.rs -sSf | /bin/sh -s -- -y --default-toolchain none
 . "$HOME/.cargo/env"
+# Locked good Rust version for building SkyStore components
+rustup install 1.77.0
 cargo install just --force
 git clone https://github.com/gilv/skystore
 cd skystore
