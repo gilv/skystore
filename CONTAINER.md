@@ -32,7 +32,7 @@ cd docker/build
 This should create the images locally in your machine. You should see the images by running `docker images`.
 
 If all you want is to test SkyStore in containers locally using `docker` (see below), then having the images locally is enough. If you want to deploy in one or more remote clusters and/or use K8s, then you also need to push the images to a registry that is accessible to all your deployment locations. For example, you can use docker.io, quay.io, or custom docker registries.
-To push the images to a given regitry, you need to tag them first by adding the registry's prefix and then push. Assuming your current folder is repo root and that you have logged in with `docker` to your account in the registry, run the following commands:
+To push the images to a given registry, you need to tag them first by adding the registry's prefix and then push. Assuming your current folder is repo root and that you have logged in with `docker` to your account in the registry, run the following commands:
 ```bash
 cd docker/build
 ./tag_all.sh <registry prefix>
