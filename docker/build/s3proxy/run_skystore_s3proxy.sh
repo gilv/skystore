@@ -23,13 +23,12 @@ echo "$S3_CFG" | base64 -d > $HOME/.aws/config
 # Load the s3-proxy service from the configuration
 echo "$SKYSTORE_S3P_CFG" | base64 -d > /skystore/config.json
 cd /skystore/skystore/s3-proxy
-skystore init --config=/skystore/config.json 
+skystore init --config=/skystore/config.json
 
-# S3-proxy is running - infinite loop with sleep to avoid busy wait
-while true
-do
-    sleep 1
-done
+# A small delay to allow the S3-proxy background process to start
+sleep 5
 
+# S3-proxy is running - wair until it fails or is killed
+skystore proxyjoin
 
 
