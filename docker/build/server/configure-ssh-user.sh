@@ -22,4 +22,4 @@ if [ -n "$AUTHORIZED_KEYS" ]; then
 fi
 
 # Start the SSH server
-/usr/sbin/sshd -D
+/usr/sbin/sshd
