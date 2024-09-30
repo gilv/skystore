@@ -4,6 +4,7 @@ import json
 import subprocess
 import os
 import time
+import socket
 import requests
 from enum import Enum
 
@@ -151,6 +152,28 @@ def register(
     except requests.RequestException as e:
         typer.secho(f"Request error: {e}.", fg="red")
 
+@app.command()
+def proxyjoin():
+    """
+    Wait until S3-proxy service is unavailable. Used for monitoring failures with S3-proxy service process
+    """
+    hostname = "localhost"
+    port = 8002
+    while True:
+        try:
+            with socket.create_connection((hostname, port), timeout=1) as conn:
+                # Connection made, so proxy service still available -> loop
+                conn.close()
+        except ConnectionRefusedError:
+            # Proxy service unavailable -> done
+            typer.secho(f"SkyStore S3-Proxy service is down at {hostname}:{port}", fg="yellow")
+            return 
+        except Exception as e:
+            # Other error -> abort
+            typer.secho(f"Error connecting to SkyStore S3-Proxy at {hostname}:{port}", fg="red")
+            return
+        time.sleep(1)
+        
 
 @app.command()
 def exit():
