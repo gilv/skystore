@@ -238,3 +238,6 @@ aws s3api --profile s3proxy <AWS S3 commands: create-bucket, list-buckets, put-o
 ```
   
 Container applications in the K8s cluster can now begin to use SkyStore by connecting to specific S3-proxy service's internal IP address (discovered through `kubectl describe svc s3proxy-service-<configuration suffix>`). They should use an AWS S3 profile similar to above except that the IP address in the `endpoint_url` field should be the interanl IP address  of the S3-proxy service in the same cluster. 
+
+# Acknowledgement
+The research leading to these results has received funding from the European Union Horizon Europe Programme under the EXTRACT Project, grant agreement n° 101093110
