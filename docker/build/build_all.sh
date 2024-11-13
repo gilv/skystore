@@ -1,14 +1,12 @@
 #!/bin/bash
 
-cd base
-./build.sh
-cd ..
+# Uncomment below to force clean build
+# export SKY_BUILD_ARGS="--no-cache"
 
-cd server
-./build.sh
-cd ..
+for n in base server s3proxy; do
+    cd $n;
+    ./build.sh;
+    cd ..;
+done
 
-cd s3proxy
-./build.sh
-cd ..
 
