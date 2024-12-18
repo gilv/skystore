@@ -341,6 +341,29 @@ impl S3 for SkyProxy {
     }
 
     #[tracing::instrument(level = "info")]
+    async fn head_bucket(
+        &self,
+        req: S3Request<HeadBucketInput>,
+    ) -> S3Result<S3Response<HeadBucketOutput>> {
+        // Send start head bucket request
+        let head_bucket_resp = apis::head_bucket(
+            &self.dir_conf,
+            models::HeadBucketRequest {
+                bucket: req.input.bucket.clone(),
+            },
+        )
+        .await;
+
+        match head_bucket_resp {
+            Ok(_) =>  Ok(S3Response::new(HeadBucketOutput::default())),
+            Err(e) => Err(s3s::S3Error::with_message(
+                s3s::S3ErrorCode::InternalError,
+                format!("Error locating bucket: {e:?}")))
+        }
+
+    }
+
+    #[tracing::instrument(level = "info")]
     async fn delete_bucket(
         &self,
         req: S3Request<DeleteBucketInput>,
@@ -393,6 +416,8 @@ impl S3 for SkyProxy {
 
         Ok(S3Response::new(DeleteBucketOutput::default()))
     }
+
+
 
     #[tracing::instrument(level = "info")]
     async fn list_buckets(
