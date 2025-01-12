@@ -356,9 +356,10 @@ impl S3 for SkyProxy {
 
         match head_bucket_resp {
             Ok(_) =>  Ok(S3Response::new(HeadBucketOutput::default())),
-            Err(e) => Err(s3s::S3Error::with_message(
-                s3s::S3ErrorCode::InternalError,
-                format!("Error locating bucket: {e:?}")))
+            Err(_) => Err(s3s::S3Error::with_message(
+                s3s::S3ErrorCode::NoSuchKey,
+                "No such key",
+                ))
         }
 
     }

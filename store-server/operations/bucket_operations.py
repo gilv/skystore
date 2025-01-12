@@ -367,15 +367,15 @@ async def head_bucket(request: HeadBucketRequest, db: Session = Depends(get_sess
     )
     bucket = await db.scalar(stmt)
 
+    logger.debug(f"head_bucket: {request} -> {bucket}")
+
     if bucket is None:
         return Response(status_code=404, content="Not Found")
 
-    logger.debug(f"head_bucket: {request} -> {bucket}")
-
-    return Response(
-        status_code=200,
-        content="Bucket exists",
-    )
+    # return Response(
+    #     status_code=200,
+    #     content="Bucket exists",
+    # )
 
 
 @router.post(
