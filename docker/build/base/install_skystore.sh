@@ -5,7 +5,7 @@ rustup install 1.77.0
 cargo install just --force
 git clone https://github.com/gilv/skystore
 cd skystore
-git checkout listen-all
+git checkout headbucket
 cd s3-proxy
 cargo build
 cd ../store-server
