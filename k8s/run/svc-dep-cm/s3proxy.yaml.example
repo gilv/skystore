@@ -18,7 +18,8 @@ spec:
       containers:
       - name: skystore-s3proxy-container
         # Change image URL as needed
-        image: registry.gitlab.bsc.es/extract/extract-sa/skystore/skystore-s3proxy
+        # image: registry.gitlab.bsc.es/extract/extract-sa/skystore/skystore-s3proxy
+        image: quay.io/erezh_ibm/skystore-s3proxy:amd64
         ports:
         - containerPort: 8002
           name: s3proxy-svc
