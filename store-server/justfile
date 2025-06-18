@@ -16,7 +16,8 @@ run-debug:
     LOG_SQL=1 uvicorn --http httptools app:app --reload --port 3000
 
 run:
-    uvicorn app:app --reload --port 3000
+    uvicorn app:app --port 3000
+    # uvicorn app:app --reload --port 3000
     # uvicorn --http httptools app:app --reload --port 3000
     # gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 127.0.0.1:3000 --enable-stdio-inheritance app:app
 
