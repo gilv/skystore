@@ -198,11 +198,13 @@ pub fn clone_put_object_request(
         key: inp.key.clone(),
         bucket_key_enabled: inp.bucket_key_enabled,
         cache_control: inp.cache_control.clone(),
-        checksum_algorithm: inp.checksum_algorithm.clone(),
-        checksum_crc32: inp.checksum_crc32.clone(),
-        checksum_crc32c: inp.checksum_crc32c.clone(),
-        checksum_sha1: inp.checksum_sha1.clone(),
-        checksum_sha256: inp.checksum_sha256.clone(),
+        // Strip checksum_algorithm to avoid unsupported algorithms like CRC64NVME
+        // The backend will calculate its own checksums
+        checksum_algorithm: None,
+        checksum_crc32: None,
+        checksum_crc32c: None,
+        checksum_sha1: None,
+        checksum_sha256: None,
         content_disposition: inp.content_disposition.clone(),
         content_encoding: inp.content_encoding.clone(),
         content_language: inp.content_language.clone(),
@@ -242,11 +244,13 @@ pub fn clone_upload_part_request(
     UploadPartInput {
         body,
         bucket: inp.bucket.clone(),
-        checksum_algorithm: inp.checksum_algorithm.clone(),
-        checksum_crc32: inp.checksum_crc32.clone(),
-        checksum_crc32c: inp.checksum_crc32c.clone(),
-        checksum_sha1: inp.checksum_sha1.clone(),
-        checksum_sha256: inp.checksum_sha256.clone(),
+        // Strip checksum_algorithm to avoid unsupported algorithms like CRC64NVME
+        // The backend will calculate its own checksums
+        checksum_algorithm: None,
+        checksum_crc32: None,
+        checksum_crc32c: None,
+        checksum_sha1: None,
+        checksum_sha256: None,
         content_length: inp.content_length,
         content_md5: inp.content_md5.clone(),
         expected_bucket_owner: inp.expected_bucket_owner.clone(),
