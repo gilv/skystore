@@ -2,7 +2,7 @@
 . "$HOME/.cargo/env"
 # Locked good Rust version for building SkyStore components
 rustup install 1.77.0
-cargo install just --force
+cargo install just --force --locked
 git clone https://github.com/gilv/skystore
 cd skystore
 git checkout headbucket
