@@ -275,14 +275,27 @@ impl S3 for SkyProxy {
             },
         )
         .await
-        .unwrap();
+        .map_err(|e| {
+            s3s::S3Error::with_message(
+                s3s::S3ErrorCode::BucketAlreadyExists,
+                format!("Failed to create bucket: {}", e),
+            )
+        })?;
         // Create bucket in actual storages
         let mut tasks = tokio::task::JoinSet::new();
         let locators = create_bucket_resp.locators;
 
         for locator in locators {
-            let client: Arc<Box<dyn ObjectStoreClient>> =
-                self.store_clients.get(&locator.tag).unwrap().clone();
+            let client: Arc<Box<dyn ObjectStoreClient>> = self
+                .store_clients
+                .get(&locator.tag)
+                .ok_or_else(|| {
+                    s3s::S3Error::with_message(
+                        s3s::S3ErrorCode::InternalError,
+                        format!("Storage client not found for tag: {}", locator.tag),
+                    )
+                })?
+                .clone();
 
             let bucket_name = locator.bucket.clone();
             let dir_conf = self.dir_conf.clone();
@@ -860,8 +873,14 @@ impl S3 for SkyProxy {
                 );
 
                 tasks.spawn(async move {
-                    let put_resp = client.put_object(req).await.unwrap();
-                    let e_tag = put_resp.output.e_tag.unwrap();
+                    let put_resp = match client.put_object(req).await {
+                        Ok(resp) => resp,
+                        Err(e) => {
+                            error!("Failed to put object to backend storage: {:?}", e);
+                            return Err(e);
+                        }
+                    };
+                    let e_tag = put_resp.output.e_tag.unwrap_or_default();
 
                     // Retrieve the object metatada through HEAD request.
                     // So we get the proper size, etag, and last_modified.
@@ -870,10 +889,16 @@ impl S3 for SkyProxy {
                         Some(length) => (length, current_timestamp_string()),
                         None => {
                             // Fetch from S3 when content_length is not provided
-                            let head_resp = client
+                            let head_resp = match client
                                 .head_object(S3Request::new(new_head_object_request(bucket, key)))
                                 .await
-                                .unwrap();
+                            {
+                                Ok(resp) => resp,
+                                Err(e) => {
+                                    error!("Failed to head object from backend storage: {:?}", e);
+                                    return Err(e);
+                                }
+                            };
                             (
                                 head_resp.output.content_length,
                                 timestamp_to_string(head_resp.output.last_modified.unwrap()),
@@ -881,7 +906,7 @@ impl S3 for SkyProxy {
                         }
                     };
 
-                    apis::complete_upload(
+                    match apis::complete_upload(
                         &conf,
                         models::PatchUploadIsCompleted {
                             id: locator.id,
@@ -892,15 +917,35 @@ impl S3 for SkyProxy {
                         },
                     )
                     .await
-                    .unwrap();
-
-                    e_tag
+                    {
+                        Ok(_) => Ok(e_tag),
+                        Err(e) => {
+                            error!("Failed to complete upload: {:?}", e);
+                            Err(s3s::S3Error::with_message(
+                                s3s::S3ErrorCode::InternalError,
+                                format!("Failed to complete upload: {:?}", e),
+                            ))
+                        }
+                    }
                 });
             });
 
         let mut e_tags = Vec::new();
-        while let Some(Ok(e_tag)) = tasks.join_next().await {
-            e_tags.push(e_tag);
+        while let Some(result) = tasks.join_next().await {
+            match result {
+                Ok(Ok(e_tag)) => e_tags.push(e_tag),
+                Ok(Err(e)) => {
+                    error!("Task failed with S3 error: {:?}", e);
+                    return Err(e);
+                }
+                Err(e) => {
+                    error!("Task panicked: {:?}", e);
+                    return Err(s3s::S3Error::with_message(
+                        s3s::S3ErrorCode::InternalError,
+                        format!("Task panicked: {:?}", e),
+                    ));
+                }
+            }
         }
 
         Ok(S3Response::new(PutObjectOutput {
