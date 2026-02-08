@@ -34,6 +34,7 @@ mod tests {
             "push".to_string(),
             "skystore".to_string(),
             "localhost".to_string(),
+            std::collections::HashMap::new(),
         )
         .await
     }

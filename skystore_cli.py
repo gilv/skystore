@@ -59,6 +59,7 @@ def init(
         if "skystore_bucket_prefix" in config
         else "skystore"
     )
+    custom_endpoints = config.get("custom_endpoints", {})
     env = {
         **os.environ,
         "INIT_REGIONS": init_regions_str,
@@ -72,6 +73,7 @@ def init(
         "POLICY": policy,
         "SKYSTORE_BUCKET_PREFIX": skystore_bucket_prefix,
         "SERVER_ADDR": server_addr,
+        "CUSTOM_ENDPOINTS": json.dumps(custom_endpoints),
     }
     env = {k: v for k, v in env.items() if v is not None}
 

@@ -65,6 +65,11 @@ async fn main() {
 
     let policy: String = env::var("POLICY").expect("POLICY for placement must be set");
 
+    let custom_endpoints: std::collections::HashMap<String, String> = env::var("CUSTOM_ENDPOINTS")
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
     let proxy = SkyProxy::new(
         init_regions,
         client_from_region,
@@ -73,6 +78,7 @@ async fn main() {
         policy,
         skystore_bucket_prefix,
         server_addr,
+        custom_endpoints,
     )
     .await;
 

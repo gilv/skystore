@@ -1,0 +1,15 @@
+{
+  "init_regions": [
+    "aws:eu-central-1",
+    "custom:ovh-gra",
+    "custom:minio-local"
+  ],
+  "client_from_region": "aws:eu-central-1",
+  "skystore_bucket_prefix": "skystore-example",
+  "policy": "write_local",
+  "server_addr": "127.0.0.1",
+  "custom_endpoints": {
+    "custom:ovh-gra": "https://s3.gra.cloud.ovh.net",
+    "custom:minio-local": "http://localhost:9000"
+  }
+}

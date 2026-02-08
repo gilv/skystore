@@ -34,6 +34,7 @@ impl SkyProxy {
         policy: String,
         skystore_bucket_prefix: String,
         server_addr: String,
+        custom_endpoints: HashMap<String, String>,
     ) -> Self {
         let mut store_clients = HashMap::new();
 
@@ -88,6 +89,16 @@ impl SkyProxy {
                         ))
                         .await,
                     ),
+                    "custom" => {
+                        // For custom provider, look up the endpoint URL from custom_endpoints
+                        let endpoint_url = custom_endpoints
+                            .get(&r)
+                            .unwrap_or_else(|| panic!("No endpoint URL configured for custom region: {}", r));
+                        Box::new(
+                            crate::client_impls::s3::S3ObjectStoreClient::new(endpoint_url.clone())
+                                .await,
+                        )
+                    }
                     _ => panic!("Unknown provider: {}", provider),
                 };
 
