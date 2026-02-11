@@ -36,6 +36,7 @@ pub struct EndpointDetails {
 
 impl EndpointConfig {
     /// Get the endpoint URL from either format
+    #[allow(dead_code)]
     pub fn get_endpoint_url(&self) -> String {
         match self {
             EndpointConfig::Simple(url) => url.clone(),
