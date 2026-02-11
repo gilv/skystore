@@ -12,12 +12,6 @@ ENV S3_CFG=""
 ENV SKY_ACCESS_KEY_ID=""
 ENV SKY_SECRET_ACCESS_KEY=""
 
-# Install support software and clean up
-RUN apt-get update \
-    && apt-get install -y ssh jq iputils-ping telnet iproute2\
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # Copy the script to execute the service
 COPY run_skystore_s3proxy.sh /skystore
 RUN chmod +x /skystore/run_skystore_s3proxy.sh
