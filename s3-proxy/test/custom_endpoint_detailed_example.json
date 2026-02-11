@@ -1,0 +1,27 @@
+{
+  "init_regions": [
+    "aws:eu-central-1",
+    "custom:ovh-eu-west",
+    "custom:minio-local"
+  ],
+  "client_from_region": "aws:eu-central-1",
+  "skystore_bucket_prefix": "skystore-example",
+  "policy": "write_local",
+  "server_addr": "127.0.0.1",
+  "custom_endpoints": {
+    "custom:ovh-eu-west": {
+      "endpoint_url": "https://s3.gra.cloud.ovh.net",
+      "aws_access_key_id": "ea8d0c19fff74693a2e69d6e172173b4",
+      "aws_secret_access_key": "a2232052de3741428b6bc05261242893",
+      "region": "gra",
+      "verify_ssl": true
+    },
+    "custom:minio-local": {
+      "endpoint_url": "http://localhost:9000",
+      "aws_access_key_id": "minioadmin",
+      "aws_secret_access_key": "minioadmin",
+      "region": "us-east-1",
+      "verify_ssl": false
+    }
+  }
+}

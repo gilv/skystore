@@ -6,6 +6,7 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 mod client_impls;
+mod endpoint_config;
 mod objstore_client;
 mod skyproxy;
 mod utils {
@@ -65,10 +66,11 @@ async fn main() {
 
     let policy: String = env::var("POLICY").expect("POLICY for placement must be set");
 
-    let custom_endpoints: std::collections::HashMap<String, String> = env::var("CUSTOM_ENDPOINTS")
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
+    let custom_endpoints: std::collections::HashMap<String, endpoint_config::EndpointConfig> =
+        env::var("CUSTOM_ENDPOINTS")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
 
     let proxy = SkyProxy::new(
         init_regions,

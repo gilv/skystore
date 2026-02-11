@@ -1,3 +1,4 @@
+use crate::endpoint_config::EndpointConfig;
 use crate::objstore_client::ObjectStoreClient;
 use crate::utils::stream_utils::split_streaming_blob;
 use crate::utils::type_utils::*;
@@ -34,7 +35,7 @@ impl SkyProxy {
         policy: String,
         skystore_bucket_prefix: String,
         server_addr: String,
-        custom_endpoints: HashMap<String, String>,
+        custom_endpoints: HashMap<String, EndpointConfig>,
     ) -> Self {
         let mut store_clients = HashMap::new();
 
@@ -47,6 +48,10 @@ impl SkyProxy {
                 let client = Arc::new(Box::new(
                     crate::client_impls::s3::S3ObjectStoreClient::new(
                         "http://localhost:8014".to_string(),
+                        None,  // access_key_id - use env
+                        None,  // secret_access_key - use env
+                        None,  // region
+                        None,  // verify_ssl
                     )
                     .await,
                 ) as Box<dyn ObjectStoreClient>);
@@ -83,20 +88,36 @@ impl SkyProxy {
                     }
                     "gcp" => Box::new(crate::client_impls::gcp::GCPObjectStoreClient::new().await),
                     "aws" => Box::new(
-                        crate::client_impls::s3::S3ObjectStoreClient::new(format!(
-                            "https://s3.{}.amazonaws.com",
-                            region
-                        ))
+                        crate::client_impls::s3::S3ObjectStoreClient::new(
+                            format!("https://s3.{}.amazonaws.com", region),
+                            None,  // access_key_id - use env
+                            None,  // secret_access_key - use env
+                            Some(region.to_string()),  // region
+                            None,  // verify_ssl
+                        )
                         .await,
                     ),
                     "custom" => {
-                        // For custom provider, look up the endpoint URL from custom_endpoints
-                        let endpoint_url = custom_endpoints
+                        // For custom provider, look up the endpoint configuration from custom_endpoints
+                        let endpoint_config = custom_endpoints
                             .get(&r)
-                            .unwrap_or_else(|| panic!("No endpoint URL configured for custom region: {}", r));
+                            .unwrap_or_else(|| {
+                                eprintln!("DEBUG: CUSTOM_ENDPOINTS env var = {:?}", std::env::var("CUSTOM_ENDPOINTS"));
+                                eprintln!("DEBUG: custom_endpoints HashMap = {:?}", custom_endpoints);
+                                eprintln!("DEBUG: Looking for region = {}", r);
+                                panic!("No endpoint configuration for custom region: {}", r)
+                            });
+                        
+                        let details = endpoint_config.get_details();
                         Box::new(
-                            crate::client_impls::s3::S3ObjectStoreClient::new(endpoint_url.clone())
-                                .await,
+                            crate::client_impls::s3::S3ObjectStoreClient::new(
+                                details.endpoint_url,
+                                details.aws_access_key_id,
+                                details.aws_secret_access_key,
+                                details.region,
+                                details.verify_ssl,
+                            )
+                            .await,
                         )
                     }
                     _ => panic!("Unknown provider: {}", provider),

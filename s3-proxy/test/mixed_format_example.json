@@ -1,0 +1,20 @@
+{
+  "init_regions": [
+    "aws:us-east-1",
+    "custom:ovh-with-creds",
+    "custom:minio-simple"
+  ],
+  "client_from_region": "aws:us-east-1",
+  "skystore_bucket_prefix": "skystore-mixed",
+  "policy": "write_local",
+  "server_addr": "127.0.0.1",
+  "custom_endpoints": {
+    "custom:ovh-with-creds": {
+      "endpoint_url": "https://s3.gra.cloud.ovh.net",
+      "aws_access_key_id": "ovh_access_key",
+      "aws_secret_access_key": "ovh_secret_key",
+      "region": "gra"
+    },
+    "custom:minio-simple": "http://localhost:9000"
+  }
+}

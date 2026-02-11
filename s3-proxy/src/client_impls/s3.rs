@@ -1,4 +1,5 @@
 use crate::objstore_client::ObjectStoreClient;
+use aws_credential_types::Credentials;
 use aws_sdk_s3::config::Region;
 use reqwest::Url;
 use s3s::dto::*;
@@ -12,26 +13,55 @@ pub struct S3ObjectStoreClient {
 
 impl S3ObjectStoreClient {
     #[allow(dead_code)]
-    pub async fn new(endpoint_url: String) -> Self {
-        let config: aws_config::SdkConfig = if endpoint_url.starts_with("http://localhost:") {
-            aws_config::from_env()
-                .endpoint_url(endpoint_url)
-                .load()
-                .await
-        } else {
-            let url = Url::parse(&endpoint_url).unwrap();
-            let host = url.host_str().unwrap().to_string();
-            let region = host.split('.').nth(1).unwrap().to_string();
-            aws_config::from_env()
-                .region(Region::new(region))
-                .endpoint_url(endpoint_url)
-                .load()
-                .await
-        };
-
-        let s3_config = aws_sdk_s3::config::Builder::from(&config)
-            .force_path_style(true)
-            .build();
+    pub async fn new(
+        endpoint_url: String,
+        access_key_id: Option<String>,
+        secret_access_key: Option<String>,
+        region: Option<String>,
+        verify_ssl: Option<bool>,
+    ) -> Self {
+        let mut config_loader = aws_config::from_env();
+        
+        // Override with provided credentials if both are available
+        if let (Some(key_id), Some(secret)) = (access_key_id, secret_access_key) {
+            let creds = Credentials::new(
+                key_id,
+                secret,
+                None,  // session_token
+                None,  // expiry
+                "custom_endpoint_config",  // provider_name
+            );
+            config_loader = config_loader.credentials_provider(creds);
+        }
+        
+        // Set region - use provided region, or extract from hostname, or use default
+        if let Some(reg) = region {
+            config_loader = config_loader.region(Region::new(reg));
+        } else if !endpoint_url.starts_with("http://localhost:") {
+            // Fallback: try to extract region from hostname
+            if let Ok(url) = Url::parse(&endpoint_url) {
+                if let Some(host) = url.host_str() {
+                    if let Some(extracted_region) = host.split('.').nth(1) {
+                        config_loader = config_loader.region(Region::new(extracted_region.to_string()));
+                    }
+                }
+            }
+        }
+        
+        config_loader = config_loader.endpoint_url(endpoint_url);
+        
+        let config = config_loader.load().await;
+        
+        let s3_config_builder = aws_sdk_s3::config::Builder::from(&config)
+            .force_path_style(true);
+        
+        // Note: SSL verification control would require custom HTTP client configuration
+        // For now, we'll document this limitation
+        if let Some(false) = verify_ssl {
+            tracing::warn!("verify_ssl=false is not yet fully implemented - SSL verification will still occur");
+        }
+        
+        let s3_config = s3_config_builder.build();
         let sdk_client = aws_sdk_s3::client::Client::from_conf(s3_config);
         let s3_proxy = Proxy::from(sdk_client);
         Self { s3_proxy }
