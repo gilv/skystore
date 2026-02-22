@@ -1,7 +1,8 @@
 #!/bin/bash
 
 if ! [ -f "$1" ]; then
-  echo "Invalid env file"
+  echo "Invalid env file";
+  exit 1;
 fi
 
 
