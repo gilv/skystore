@@ -3,6 +3,7 @@
 # Set default values for SSH_USERNAME and PASSWORD if not provided
 : ${SSH_USERNAME:=ubuntu}
 : ${PASSWORD:=changeme}
+: ${SSH_PORT:=22}
 : ${AUTHORIZED_KEYS:=$(echo "$SKYSTORE_PUB_KEY" | base64 -d)}
 
 # Create the user with the provided username and set the password
@@ -22,4 +23,4 @@ if [ -n "$AUTHORIZED_KEYS" ]; then
 fi
 
 # Start the SSH server
-/usr/sbin/sshd
+/usr/sbin/sshd -p ${SSH_PORT}
