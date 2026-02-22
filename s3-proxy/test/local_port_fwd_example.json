@@ -1,0 +1,29 @@
+{
+  "init_regions": [
+    "aws:eu-central-1",
+    "custom:minio-cluster-a",
+    "custom:minio-cluster-b"
+  ],
+  "client_from_region": "custom:minio-cluster-a",
+  "skystore_bucket_prefix": "skystore-test",
+  "policy": "write_local",
+  "server_addr": "192.168.1.100",
+  "custom_endpoints": {
+    "custom:minio-cluster-a": {
+      "endpoint_url": "http://minio.cluster-a.local:9000",
+      "aws_access_key_id": "minioadmin",
+      "aws_secret_access_key": "minioadmin",
+      "region": "us-east-1",
+      "verify_ssl": false,
+      "local_port_fwd": 9001
+    },
+    "custom:minio-cluster-b": {
+      "endpoint_url": "http://minio.cluster-b.local:9000",
+      "aws_access_key_id": "minioadmin",
+      "aws_secret_access_key": "minioadmin",
+      "region": "us-east-1",
+      "verify_ssl": false,
+      "local_port_fwd": 9002
+    }
+  }
+}
