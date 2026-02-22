@@ -9,8 +9,22 @@ python = "^3.8"
 requests = "*"
 typer = "*"
 psutil = "*"
+# Dependencies from store-server
+fastapi = "*"
+databases = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+aiosqlite = "*"
+pydantic = "*"
+httpx = "*"
+sqlalchemy = ">=2.0"
+sqlalchemy_repr = "*"
+rich = "*"
+jq = "*"
+greenlet = "*"
 
 [tool.poetry.dev-dependencies]
+pytest = "*"
+pytest-asyncio = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
