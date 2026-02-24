@@ -7,6 +7,7 @@ chmod 600 $HOME/.ssh/id_rsa
 chown -R $USER:$USER $HOME/.ssh
 
 # Set up SSH tunnel - skystore server address must be specified and valid
+echo "Setting up SSH tunnel to SkyStore server"
 /usr/bin/ssh -p $SSH_PORT -o "StrictHostKeyChecking no" -L 3000:localhost:3000 -N -f $SSH_USERNAME@$SKYSTORE_SRV_ADDR
 if [[ $? -ne 0 ]]; then
     echo "Could not establish SSH tunnel to: $SSH_USERNAME@$SKYSTORE_SRV_ADDR"
@@ -23,12 +24,14 @@ echo "$S3_CFG" | base64 -d > $HOME/.aws/config
 # Load the s3-proxy service from the configuration
 echo "$SKYSTORE_S3P_CFG" | base64 -d > /skystore/config.json
 cd /skystore/skystore/s3-proxy
+echo "Starting SkyStore S3-Proxy service"
 skystore init --config=/skystore/config.json
 
 # A small delay to allow the S3-proxy background process to start
 sleep 5
 
 # S3-proxy is running - wair until it fails or is killed
+echo "Waiting for S3-proxy to finish"
 skystore proxyjoin
 
 
