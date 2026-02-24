@@ -5,9 +5,10 @@ description = "CLI for SkyStore"
 authors = ["Shu Liu <lshu@berkeley.edu>"]
 
 [tool.poetry.dependencies]
-python = "^3.8" 
+python = "^3.8"
 requests = "*"
 typer = "*"
+psutil = "*"
 
 [tool.poetry.dev-dependencies]
 

@@ -6,7 +6,9 @@ import os
 import time
 import socket
 import requests
+import psutil
 from enum import Enum
+from pathlib import Path
 
 app = typer.Typer(name="skystore")
 env = os.environ.copy()
@@ -18,6 +20,10 @@ DEFAULT_SKY_S3_PATH = os.path.join(
 DEFAULT_STORE_SERVER_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "store-server"
 )
+
+# Directory to store process information
+SKYSTORE_DIR = Path.home() / ".skystore"
+SKY_S3_PID_FILE = SKYSTORE_DIR / "sky_s3.pid"
 
 
 class Policy(str, Enum):
@@ -103,18 +109,27 @@ def init(
 
     time.sleep(2)
 
-    # Start the s3-proxy
+    # Create .skystore directory if it doesn't exist
+    SKYSTORE_DIR.mkdir(exist_ok=True)
+
+    # Start the s3-proxy and save its PID
     if os.path.exists(sky_s3_binary_path):
-        subprocess.Popen(
+        sky_s3_process = subprocess.Popen(
             sky_s3_binary_path,
             env=env,
         )
     else:
-        subprocess.Popen(
+        sky_s3_process = subprocess.Popen(
             ["cargo", "run"],
             env=env,
         )
+    
+    # Save the PID to file
+    with open(SKY_S3_PID_FILE, "w") as f:
+        f.write(str(sky_s3_process.pid))
+    
     typer.secho(f"SkyStore initialized at: {'http://127.0.0.1:8002'}", fg="green")
+    typer.secho(f"sky_s3 PID: {sky_s3_process.pid} (saved to {SKY_S3_PID_FILE})", fg="blue")
 
 
 @app.command()
@@ -157,25 +172,48 @@ def register(
 @app.command()
 def proxyjoin():
     """
-    Wait until S3-proxy service is unavailable. Used for monitoring failures with S3-proxy service process
+    Wait until sky_s3 process exits. Used for monitoring the sky_s3 service process.
     """
-    hostname = "localhost"
-    port = 8002
-    while True:
-        try:
-            with socket.create_connection((hostname, port), timeout=1) as conn:
-                # Connection made, so proxy service still available -> loop
-                conn.close()
-        except ConnectionRefusedError:
-            # Proxy service unavailable -> done
-            typer.secho(f"SkyStore S3-Proxy service is down at {hostname}:{port}", fg="yellow")
-            return 
-        except Exception as e:
-            # Other error -> abort
-            typer.secho(f"Error connecting to SkyStore S3-Proxy at {hostname}:{port}", fg="red")
-            return
-        time.sleep(1)
-        
+    # Check if PID file exists
+    if not SKY_S3_PID_FILE.exists():
+        typer.secho(f"Error: PID file not found at {SKY_S3_PID_FILE}", fg="red")
+        typer.secho("Run 'init' command first to start sky_s3.", fg="yellow")
+        raise typer.Exit(code=1)
+    
+    # Read the PID
+    try:
+        with open(SKY_S3_PID_FILE, "r") as f:
+            pid = int(f.read().strip())
+    except (ValueError, IOError) as e:
+        typer.secho(f"Error reading PID file: {e}", fg="red")
+        raise typer.Exit(code=1)
+    
+    # Check if process exists
+    try:
+        process = psutil.Process(pid)
+        typer.secho(f"Monitoring sky_s3 process (PID: {pid})...", fg="blue")
+    except psutil.NoSuchProcess:
+        typer.secho(f"Error: sky_s3 process (PID: {pid}) is not running", fg="red")
+        # Clean up the PID file
+        SKY_S3_PID_FILE.unlink(missing_ok=True)
+        raise typer.Exit(code=1)
+    
+    # Wait for the process to exit
+    try:
+        while True:
+            if not process.is_running():
+                typer.secho(f"sky_s3 process (PID: {pid}) has exited", fg="yellow")
+                # Clean up the PID file
+                SKY_S3_PID_FILE.unlink(missing_ok=True)
+                break
+            time.sleep(1)
+    except KeyboardInterrupt:
+        typer.secho("\nInterrupted by user", fg="yellow")
+        raise typer.Exit(code=0)
+    except Exception as e:
+        typer.secho(f"Error monitoring process: {e}", fg="red")
+        raise typer.Exit(code=1)
+
 
 @app.command()
 def exit():
@@ -191,6 +229,10 @@ def exit():
                     subprocess.run([f"kill -15 {pid}"], shell=True)
 
             typer.secho(f"Stopped services running on port {port}.", fg="red")
+        
+        # Clean up PID file
+        SKY_S3_PID_FILE.unlink(missing_ok=True)
+        
     except FileNotFoundError:
         typer.secho("PID file not found. Cleaned up processes by port.", fg="yellow")
     except Exception as e:
@@ -233,3 +275,5 @@ def main():
 
 if __name__ == "__main__":
     app()
+
+# Made with Bob
