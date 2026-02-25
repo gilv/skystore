@@ -1,5 +1,7 @@
 #!/bin/bash
 
+: ${RUN_IN_CNTR:=1}
+
 # Set up SSH client configuration with private key
 mkdir -p $HOME/.ssh
 echo "$SKYSTORE_PRV_KEY" | base64 -d > $HOME/.ssh/id_rsa
@@ -24,14 +26,16 @@ echo "$S3_CFG" | base64 -d > $HOME/.aws/config
 # Load the s3-proxy service from the configuration
 echo "$SKYSTORE_S3P_CFG" | base64 -d > /skystore/config.json
 cd /skystore/skystore/s3-proxy
-echo "Starting SkyStore S3-Proxy service"
-skystore init --config=/skystore/config.json
 
-# A small delay to allow the S3-proxy background process to start
-sleep 5
+python ./tunneler/tunnler.py $SKYSTORE_SRV_ADDR $SSH_PORT $SSH_USERNAME /skystore/config.json /skystore/mapping.txt
 
-# S3-proxy is running - wair until it fails or is killed
-echo "Waiting for S3-proxy to finish"
-skystore proxyjoin
+# Check if mapping.txt exists and is non-empty
+if [[ ! -f /skystore/mapping.txt ]] || [[ ! -s /skystore/mapping.txt ]]; then
+    echo "mapping.txt is non-existent or empty, running s3-proxy directly"
+    ./run_s3p.sh /skystore/config.json
+else
+    echo "mapping.txt exists and is non-empty, using wrap_s3p.sh"
+    ./tunneler/wrap_s3p.sh /skystore/mapping.txt ./run_s3p.sh /skystore/config.json
+fi
 
 

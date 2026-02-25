@@ -5,11 +5,9 @@ rustup install 1.77.0
 cargo install just --force --version 1.40.0 --locked
 git clone https://github.com/gilv/skystore
 cd skystore
-git checkout custom
+git checkout tunneler
 cd s3-proxy
 cargo build
-cd ../store-server
-pip install -r requirements.txt
 cd ..
 pip install -U .
 
