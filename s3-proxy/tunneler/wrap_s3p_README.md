@@ -1,6 +1,6 @@
 # wrap_s3p.sh - S3 Proxy Wrapper Script
 
-This wrapper script enables s3-proxy to access S3 services through SSH-forwarded ports by mapping hostnames to localhost.
+This wrapper script enables any command (typically s3-proxy) to access S3 services through SSH-forwarded ports by mapping hostnames to localhost.
 
 ## Overview
 
@@ -12,13 +12,14 @@ The wrapper script works in conjunction with the tunneler to enable hostname res
 ## Usage
 
 ```bash
-./wrap_s3p.sh <mapping_file> [s3-proxy arguments...]
+./wrap_s3p.sh <mapping_file> <command> [command arguments...]
 ```
 
 ### Arguments
 
 - `mapping_file`: Path to the hostname mapping file created by tunneler
-- `[s3-proxy arguments...]`: All remaining arguments are passed to the s3-proxy (skystore) command
+- `command`: The command to execute (e.g., `skystore`, `/path/to/binary`)
+- `[command arguments...]`: All remaining arguments are passed to the specified command
 
 ### Environment Variables
 
@@ -30,13 +31,19 @@ The wrapper script works in conjunction with the tunneler to enable hostname res
 
 ```bash
 export RUN_IN_CNTR=1
-./wrap_s3p.sh /tmp/hostname_mapping.txt init --config=/etc/skystore/config.json
+./wrap_s3p.sh /tmp/hostname_mapping.txt skystore init --config=/etc/skystore/config.json
 ```
 
 ### Namespace Mode (Host System)
 
 ```bash
-./wrap_s3p.sh /tmp/hostname_mapping.txt init --config=/etc/skystore/config.json
+./wrap_s3p.sh /tmp/hostname_mapping.txt skystore init --config=/etc/skystore/config.json
+```
+
+### Using with a Different Command
+
+```bash
+./wrap_s3p.sh /tmp/hostname_mapping.txt /usr/local/bin/my-s3-client --verbose --endpoint=https://s3.example.com
 ```
 
 ## How It Works
@@ -46,7 +53,7 @@ export RUN_IN_CNTR=1
 1. Reads hostnames from the mapping file
 2. Backs up `/etc/hosts` to `/etc/hosts.skystore.backup`
 3. Appends hostname mappings to `/etc/hosts` (all mapped to 127.0.0.1)
-4. Executes s3-proxy with the modified `/etc/hosts`
+4. Executes the specified command with the modified `/etc/hosts`
 5. On exit, removes the added mappings from `/etc/hosts`
 
 ### Namespace Mode
@@ -56,7 +63,7 @@ export RUN_IN_CNTR=1
 3. Copies system `/etc/hosts` and adds hostname mappings
 4. Uses `unshare -m` to create a mount namespace
 5. Bind mounts the custom hosts file over `/etc/hosts`
-6. Executes s3-proxy in the isolated namespace
+6. Executes the specified command in the isolated namespace
 7. Cleans up temporary files on exit
 
 ## Integration with Tunneler
@@ -65,7 +72,7 @@ The typical workflow is:
 
 1. **Tunneler** sets up SSH tunnels and creates the mapping file
 2. **wrap_s3p.sh** uses the mapping file to configure hostname resolution
-3. **s3-proxy** accesses forwarded S3 services through localhost
+3. **Command** (e.g., s3-proxy) accesses forwarded S3 services through localhost
 
 Example complete workflow:
 
@@ -75,7 +82,7 @@ Example complete workflow:
 
 # Step 2: Run s3-proxy with wrapper
 export RUN_IN_CNTR=1  # If in container
-./wrap_s3p.sh /tmp/hostname_mapping.txt init --config=/etc/skystore/config.json
+./wrap_s3p.sh /tmp/hostname_mapping.txt skystore init --config=/etc/skystore/config.json
 ```
 
 ## Requirements
@@ -119,6 +126,10 @@ Ensure you're running as root inside the container, or use a container runtime t
 ## Security Considerations
 
 - **Container Mode**: Modifies system-wide `/etc/hosts`, affecting all processes in the container
-- **Namespace Mode**: Isolated to the s3-proxy process only, more secure
+- **Namespace Mode**: Isolated to the executed command process only, more secure
 - Both modes clean up on exit, but unexpected termination may leave mappings in place
 - The backup file `/etc/hosts.skystore.backup` is created only once to preserve the original state
+
+## Flexibility
+
+The wrapper script is now generic and can wrap any command that needs hostname resolution for SSH-forwarded services. While primarily designed for s3-proxy (skystore), it can be used with any S3-compatible client or tool that needs to access forwarded S3 endpoints.

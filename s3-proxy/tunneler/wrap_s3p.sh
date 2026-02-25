@@ -1,18 +1,20 @@
 #!/bin/bash
 # Wrapper script for s3-proxy that handles hostname mapping for forwarded S3 services
-# Usage: wrap_s3p.sh <mapping_file> [s3-proxy arguments...]
+# Usage: wrap_s3p.sh <mapping_file> <command> [command arguments...]
 
 set -e
 
-# Check if mapping file argument is provided
-if [ $# -lt 1 ]; then
-    echo "Error: Missing mapping file argument" >&2
-    echo "Usage: $0 <mapping_file> [s3-proxy arguments...]" >&2
+# Check if mapping file and command arguments are provided
+if [ $# -lt 2 ]; then
+    echo "Error: Missing required arguments" >&2
+    echo "Usage: $0 <mapping_file> <command> [command arguments...]" >&2
     exit 1
 fi
 
 MAPPING_FILE="$1"
-shift  # Remove mapping file from arguments, rest are for s3-proxy
+shift  # Remove mapping file from arguments
+COMMAND="$1"
+shift  # Remove command from arguments, rest are for the command
 
 # Check if mapping file exists
 if [ ! -f "$MAPPING_FILE" ]; then
@@ -74,9 +76,9 @@ if [ "$RUN_IN_CNTR" = "1" ]; then
     }
     trap cleanup EXIT INT TERM
     
-    # Execute s3-proxy
-    echo "Executing: skystore $@"
-    exec skystore "$@"
+    # Execute command
+    echo "Executing: $COMMAND $@"
+    exec "$COMMAND" "$@"
     
 else
     echo "Running s3-proxy with mount namespace isolation (unshare)"
@@ -104,8 +106,8 @@ else
     done
     
     # Use unshare to create a mount namespace and bind mount our custom hosts file
-    echo "Executing: unshare -m bash -c 'mount --bind $TEMP_ETC/hosts /etc/hosts && skystore $@'"
-    exec unshare -m bash -c "mount --bind $TEMP_ETC/hosts /etc/hosts && exec skystore $*"
+    echo "Executing: unshare -m bash -c 'mount --bind $TEMP_ETC/hosts /etc/hosts && $COMMAND $@'"
+    exec unshare -m bash -c "mount --bind $TEMP_ETC/hosts /etc/hosts && exec $COMMAND $*"
 fi
 
 # Made with Bob
