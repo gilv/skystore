@@ -22,7 +22,7 @@ cd /skystore/skystore/s3-proxy
 
 # Set up SSH tunnel - skystore server address must be specified and valid
 echo "Setting up SSH tunnel[s] to SkyStore server"
-python ./tunneler/tunnler.py $SKYSTORE_SRV_ADDR $SSH_PORT $SSH_USERNAME /skystore/config.json /skystore/mapping.txt
+python tunneler/tunneler.py $SKYSTORE_SRV_ADDR $SSH_PORT $SSH_USERNAME /skystore/config.json /skystore/mapping.txt
 if [[ $? -ne 0 ]]; then
     echo "Could not establish SSH tunnel[s] to: $SSH_USERNAME@$SKYSTORE_SRV_ADDR"
     exit 1
@@ -34,7 +34,7 @@ if [[ ! -f /skystore/mapping.txt ]] || [[ ! -s /skystore/mapping.txt ]]; then
     ./run_s3p.sh /skystore/config.json
 else
     echo "mapping.txt exists and is non-empty, using wrap_s3p.sh"
-    ./tunneler/wrap_s3p.sh /skystore/mapping.txt ./run_s3p.sh /skystore/config.json
+    tunneler/wrap_s3p.sh /skystore/mapping.txt ./run_s3p.sh /skystore/config.json
 fi
 
 
