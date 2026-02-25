@@ -8,14 +8,6 @@ echo "$SKYSTORE_PRV_KEY" | base64 -d > $HOME/.ssh/id_rsa
 chmod 600 $HOME/.ssh/id_rsa
 chown -R $USER:$USER $HOME/.ssh
 
-# Set up SSH tunnel - skystore server address must be specified and valid
-echo "Setting up SSH tunnel to SkyStore server"
-/usr/bin/ssh -p $SSH_PORT -o "StrictHostKeyChecking no" -L 3000:localhost:3000 -N -f $SSH_USERNAME@$SKYSTORE_SRV_ADDR
-if [[ $? -ne 0 ]]; then
-    echo "Could not establish SSH tunnel to: $SSH_USERNAME@$SKYSTORE_SRV_ADDR"
-    exit 1
-fi
-
 # Set up Rust env
 . "$HOME/.cargo/env"
 
@@ -23,11 +15,18 @@ fi
 mkdir -p $HOME/.aws
 echo "$S3_CFG" | base64 -d > $HOME/.aws/config
 
-# Load the s3-proxy service from the configuration
+# Write the s3-proxy configuration
 echo "$SKYSTORE_S3P_CFG" | base64 -d > /skystore/config.json
+
 cd /skystore/skystore/s3-proxy
 
+# Set up SSH tunnel - skystore server address must be specified and valid
+echo "Setting up SSH tunnel[s] to SkyStore server"
 python ./tunneler/tunnler.py $SKYSTORE_SRV_ADDR $SSH_PORT $SSH_USERNAME /skystore/config.json /skystore/mapping.txt
+if [[ $? -ne 0 ]]; then
+    echo "Could not establish SSH tunnel[s] to: $SSH_USERNAME@$SKYSTORE_SRV_ADDR"
+    exit 1
+fi
 
 # Check if mapping.txt exists and is non-empty
 if [[ ! -f /skystore/mapping.txt ]] || [[ ! -s /skystore/mapping.txt ]]; then
