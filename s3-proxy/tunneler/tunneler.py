@@ -22,7 +22,7 @@ from pathlib import Path
 class TunnelManager:
     """Manages SSH tunnels for S3 service forwarding"""
     
-    def __init__(self, server_ip, ssh_port, ssh_username, config_path, mapping_file):
+    def __init__(self, server_ip, ssh_port, ssh_username, config_path, mapping_file, dry_run=False):
         self.server_ip = server_ip
         self.ssh_port = ssh_port
         self.ssh_username = ssh_username
@@ -32,6 +32,7 @@ class TunnelManager:
         self.ssh_process = None
         self.config = None
         self.client_region = None
+        self.dry_run = dry_run
         
     def load_config(self):
         """Load and parse the s3-proxy configuration JSON file"""
@@ -255,6 +256,15 @@ class TunnelManager:
         print(f"Starting SSH tunnel to {self.ssh_username}@{self.server_ip}:{self.ssh_port}")
         print(f"Command: {' '.join(ssh_cmd)}")
         
+        # Dry-run mode: print command and exit without executing
+        if self.dry_run:
+            print("\n=== DRY-RUN MODE ===")
+            print("Configuration has been backed up and modified.")
+            print("The following SSH tunnel command would be executed:")
+            print(f"\n{' '.join(ssh_cmd)}\n")
+            print("Exiting without executing the tunnel.")
+            return True
+        
         try:
             self.ssh_process = subprocess.Popen(
                 ssh_cmd,
@@ -303,11 +313,14 @@ def main():
         description='SSH Tunnel Manager for SkyStore S3 Proxy',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Example:
+Examples:
   %(prog)s 192.168.1.100 22 skystore /path/to/config.json /tmp/hostname_mapping.txt
+  %(prog)s -d 192.168.1.100 22 skystore /path/to/config.json /tmp/hostname_mapping.txt
         """
     )
     
+    parser.add_argument('-d', '--dry-run', action='store_true',
+                        help='Dry-run mode: backup and modify config, but only print tunnel commands without executing them')
     parser.add_argument('server_ip', help='SkyStore server IP address')
     parser.add_argument('ssh_port', type=int, help='SkyStore server SSH port')
     parser.add_argument('ssh_username', help='SSH username for SkyStore server')
@@ -322,14 +335,15 @@ Example:
         args.ssh_port,
         args.ssh_username,
         args.config_path,
-        args.mapping_file
+        args.mapping_file,
+        dry_run=args.dry_run
     )
     
-    # Start tunnel (runs in background)
+    # Start tunnel (runs in background, or prints command in dry-run mode)
     if not manager.start_tunnel():
         sys.exit(1)
     
-    # Exit successfully - tunnel is running in background
+    # Exit successfully - tunnel is running in background (or dry-run completed)
     sys.exit(0)
 
 
