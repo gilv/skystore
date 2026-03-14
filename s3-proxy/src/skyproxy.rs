@@ -15,7 +15,7 @@ use skystore_rust_client::models;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::SystemTime;
-use tracing::error;
+use tracing::{error, info};
 
 pub struct SkyProxy {
     pub store_clients: HashMap<String, Arc<Box<dyn ObjectStoreClient>>>,
@@ -298,13 +298,23 @@ impl S3 for SkyProxy {
         req: S3Request<CreateBucketInput>,
     ) -> S3Result<S3Response<CreateBucketOutput>> {
         // Send start create bucket request
+        let create_bucket_request = models::CreateBucketRequest {
+            bucket: req.input.bucket.clone(),
+            client_from_region: self.client_from_region.clone(),
+            warmup_regions: None, // TODO
+        };
+        
+        info!(
+            server_endpoint = %self.dir_conf.base_path,
+            bucket = %create_bucket_request.bucket,
+            client_from_region = %create_bucket_request.client_from_region,
+            warmup_regions = ?create_bucket_request.warmup_regions,
+            "Issuing start_create_bucket call to store server"
+        );
+        
         let create_bucket_resp = apis::start_create_bucket(
             &self.dir_conf,
-            models::CreateBucketRequest {
-                bucket: req.input.bucket.clone(),
-                client_from_region: self.client_from_region.clone(),
-                warmup_regions: None, // TODO
-            },
+            create_bucket_request,
         )
         .await
         .map_err(|e| {
