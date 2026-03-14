@@ -1,4 +1,4 @@
 #!/bin/bash
 
-docker build $SKY_BUILD_ARGS -t skystore-base .
+DOCKER_BUILDKIT=1 docker buildx build $SKY_BUILD_ARGS -t skystore-base .
 
