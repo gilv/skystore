@@ -304,13 +304,13 @@ impl S3 for SkyProxy {
             warmup_regions: None, // TODO
         };
         
-        info!(
-            server_endpoint = %self.dir_conf.base_path,
-            bucket = %create_bucket_request.bucket,
-            client_from_region = %create_bucket_request.client_from_region,
-            warmup_regions = ?create_bucket_request.warmup_regions,
-            "Issuing start_create_bucket call to store server"
-        );
+        // info!(
+        //     server_endpoint = %self.dir_conf.base_path,
+        //     bucket = %create_bucket_request.bucket,
+        //     client_from_region = %create_bucket_request.client_from_region,
+        //     warmup_regions = ?create_bucket_request.warmup_regions,
+        //     "Issuing start_create_bucket call to store server"
+        // );
         
         let create_bucket_resp = apis::start_create_bucket(
             &self.dir_conf,

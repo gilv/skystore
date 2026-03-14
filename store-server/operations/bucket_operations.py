@@ -109,11 +109,11 @@ async def register_buckets(
 async def start_create_bucket(
     request: CreateBucketRequest, db: Session = Depends(get_session)
 ) -> CreateBucketResponse:
-    logger.info(f"REQUEST: {request}")
-    logger.info(f"Looking for bucket: {request.bucket}")
+    # logger.info(f"REQUEST: {request}")
+    # logger.info(f"Looking for bucket: {request.bucket}")
     stmt = select(DBLogicalBucket).where(DBLogicalBucket.bucket == request.bucket)
     existing_logical_bucket = await db.scalar(stmt)
-    logger.info(f"Found existing bucket: {existing_logical_bucket}")
+    # logger.info(f"Found existing bucket: {existing_logical_bucket}")
 
     if existing_logical_bucket:
         logger.error("Bucket with this name already exists")
