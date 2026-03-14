@@ -1,4 +1,9 @@
 #!/bin/bash
 
-DOCKER_BUILDKIT=1 docker buildx build $SKY_BUILD_ARGS -t skystore-base .
+: ${SKY_TAG_PREFIX:=""}
+: ${SKY_TAG_SUFFIX:="latest"}
+
+[[ -n "$SKY_TAG_PREFIX" ]] && ! [[ "$SKY_TAG_PREFIX" == */ ]] && SKY_TAG_PREFIX="$SKY_TAG_PREFIX/"
+
+DOCKER_BUILDKIT=1 docker buildx build $SKY_BUILD_ARGS -t ${SKY_TAG_PREFIX}skystore-base:${SKY_TAG_SUFFIX} .
 
