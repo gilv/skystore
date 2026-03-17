@@ -6,6 +6,7 @@ cargo install just --force --version 1.40.0 --locked
 git clone https://github.com/gilv/skystore
 cd skystore
 git checkout tunneler
+git pull
 cd s3-proxy
 cargo build
 cd ..
