@@ -723,6 +723,14 @@ impl S3 for SkyProxy {
             Some(location) => {
                 if req.headers.get("X-SKYSTORE-PULL").is_some() {
                     if location.tag != self.client_from_region {
+                        info!(
+                            bucket = %bucket,
+                            key = %key,
+                            source_region = %location.tag,
+                            target_region = %self.client_from_region,
+                            "copy_on_read: Fetching object from remote region, will copy to local region"
+                        );
+                        
                         let get_resp = self
                             .store_clients
                             .get(&location.tag)
@@ -740,11 +748,19 @@ impl S3 for SkyProxy {
                         let client_from_region_clone = self.client_from_region.clone();
                         let store_clients_clone = self.store_clients.clone();
                         let policy = self.policy.clone();
+                        let bucket_clone = bucket.clone();
+                        let key_clone = key.clone();
 
                         let mut input_blobs = split_streaming_blob(data, 2); // locators.len() + 1
                         let response_blob = input_blobs.pop();
 
                         tokio::spawn(async move {
+                            info!(
+                                bucket = %bucket_clone,
+                                key = %key_clone,
+                                target_region = %client_from_region_clone,
+                                "copy_on_read: Starting background copy to local region"
+                            );
                             let start_upload_resp_result = apis::start_upload(
                                 &dir_conf_clone,
                                 models::StartUploadRequest {
@@ -765,13 +781,22 @@ impl S3 for SkyProxy {
                             if let Ok(start_upload_resp) = start_upload_resp_result {
                                 let locators = start_upload_resp.locators;
                                 let request_template = clone_put_object_request(
-                                    &new_put_object_request(bucket.clone(), key.clone()),
+                                    &new_put_object_request(bucket_clone.clone(), key_clone.clone()),
                                     None,
                                 );
 
                                 for (locator, input_blob) in
                                     locators.into_iter().zip(input_blobs.into_iter())
                                 {
+                                    info!(
+                                        bucket = %bucket_clone,
+                                        key = %key_clone,
+                                        target_region = %locator.tag,
+                                        target_bucket = %locator.bucket,
+                                        target_key = %locator.key,
+                                        "copy_on_read: Writing object to local storage"
+                                    );
+                                    
                                     let client: Arc<Box<dyn ObjectStoreClient>> =
                                         store_clients_clone.get(&locator.tag).unwrap().clone();
                                     let req = S3Request::new(clone_put_object_request(
@@ -793,11 +818,14 @@ impl S3 for SkyProxy {
                                         )))
                                         .await
                                         .unwrap();
+                                    
+                                    let size = head_resp.output.content_length as u64;
+                                    
                                     apis::complete_upload(
                                         &dir_conf_clone,
                                         models::PatchUploadIsCompleted {
                                             id: locator.id,
-                                            size: head_resp.output.content_length as u64,
+                                            size,
                                             etag: e_tag.clone(),
                                             last_modified: timestamp_to_string(
                                                 head_resp.output.last_modified.unwrap(),
@@ -807,7 +835,25 @@ impl S3 for SkyProxy {
                                     )
                                     .await
                                     .unwrap();
+                                    
+                                    info!(
+                                        bucket = %bucket_clone,
+                                        key = %key_clone,
+                                        target_region = %locator.tag,
+                                        target_bucket = %locator.bucket,
+                                        target_key = %locator.key,
+                                        size = %size,
+                                        etag = %e_tag,
+                                        "copy_on_read: Successfully completed copy to local region"
+                                    );
                                 }
+                            } else {
+                                info!(
+                                    bucket = %bucket_clone,
+                                    key = %key_clone,
+                                    target_region = %client_from_region_clone,
+                                    "copy_on_read: Object already exists in local region or upload in progress, skipping copy"
+                                );
                             }
                         });
 
