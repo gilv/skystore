@@ -127,6 +127,7 @@ async fn main() {
             let mut s3_service = s3_service.clone();
             let proxy_clone = proxy.clone();
             if env::var("POLICY").unwrap() == "copy_on_read" {
+                info!("Injecting X-SKYSTORE-PULL header with value 'copy_on_read' for {} {}", req.method(), req.uri());
                 req.headers_mut()
                     .insert("X-SKYSTORE-PULL", "copy_on_read".parse().unwrap());
             }
@@ -164,7 +165,12 @@ async fn main() {
                 };
                 Box::pin(fut)
             } else {
-                s3_service.call(req).boxed()
+                info!("Calling s3_service for {} {}", req.method(), req.uri());
+                let fut = s3_service.call(req).map(|result| {
+                    info!("s3_service call completed with status: {:?}", result.as_ref().map(|r| r.status()).ok());
+                    result
+                });
+                fut.boxed()
             }
         });
 

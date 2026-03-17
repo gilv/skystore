@@ -716,6 +716,15 @@ impl S3 for SkyProxy {
     ) -> S3Result<S3Response<GetObjectOutput>> {
         let bucket = req.input.bucket.clone();
         let key = req.input.key.clone();
+        
+        info!(
+            bucket = %bucket,
+            key = %key,
+            range = ?req.input.range,
+            if_match = ?req.input.if_match,
+            if_none_match = ?req.input.if_none_match,
+            "Entering get_object"
+        );
 
         let locator = self.locate_object(bucket.clone(), key.clone()).await?;
 
@@ -750,6 +759,8 @@ impl S3 for SkyProxy {
                         let policy = self.policy.clone();
                         let bucket_clone = bucket.clone();
                         let key_clone = key.clone();
+                        let bucket_log = bucket.clone();
+                        let key_log = key.clone();
 
                         let mut input_blobs = split_streaming_blob(data, 2); // locators.len() + 1
                         let response_blob = input_blobs.pop();
@@ -867,9 +878,17 @@ impl S3 for SkyProxy {
                             tag_count: get_resp.output.tag_count,
                             ..Default::default()
                         });
+                        info!(
+                            bucket = %bucket_log,
+                            key = %key_log,
+                            content_length = ?response.output.content_length,
+                            "Exiting get_object: copy_on_read from remote region"
+                        );
                         return Ok(response);
                     } else {
-                        return self
+                        let bucket_log = req.input.bucket.clone();
+                        let key_log = req.input.key.clone();
+                        let result = self
                             .store_clients
                             .get(&self.client_from_region)
                             .unwrap()
@@ -879,9 +898,19 @@ impl S3 for SkyProxy {
                                 input
                             }))
                             .await;
+                        info!(
+                            bucket = %bucket_log,
+                            key = %key_log,
+                            success = result.is_ok(),
+                            "Exiting get_object: from local region"
+                        );
+                        return result;
                     }
                 } else {
-                    return self
+                    let bucket_log = req.input.bucket.clone();
+                    let key_log = req.input.key.clone();
+                    let region_log = location.tag.clone();
+                    let result = self
                         .store_clients
                         .get(&location.tag)
                         .unwrap()
@@ -891,12 +920,27 @@ impl S3 for SkyProxy {
                             input
                         }))
                         .await;
+                    info!(
+                        bucket = %bucket_log,
+                        key = %key_log,
+                        region = %region_log,
+                        success = result.is_ok(),
+                        "Exiting get_object: from remote region"
+                    );
+                    return result;
                 }
             }
-            None => Err(s3s::S3Error::with_message(
-                s3s::S3ErrorCode::NoSuchKey,
-                "Object not found",
-            )),
+            None => {
+                info!(
+                    bucket = %bucket,
+                    key = %key,
+                    "Exiting get_object: object not found"
+                );
+                Err(s3s::S3Error::with_message(
+                    s3s::S3ErrorCode::NoSuchKey,
+                    "Object not found",
+                ))
+            }
         }
     }
 
