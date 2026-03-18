@@ -745,27 +745,28 @@ impl S3 for SkyProxy {
                             .get(&location.tag)
                             .unwrap()
                             .get_object(req.map_input(|mut input: GetObjectInput| {
-                                input.bucket = location.bucket;
-                                input.key = location.key;
+                                input.bucket = location.bucket.clone();
+                                input.key = location.key.clone();
                                 input
                             }))
                             .await?;
-                        let data = get_resp.output.body.unwrap();
+                        let response_data = get_resp.output.body.unwrap();
                         
                         // Get expected size and ETag from source for validation
                         let expected_size = get_resp.output.content_length as u64;
                         let source_etag = get_resp.output.e_tag.clone();
 
                         // Spawn a background task to store the object in the local object store
+                        // This task will fetch the object independently (dual-stream approach)
                         let dir_conf_clone = self.dir_conf.clone();
                         let client_from_region_clone = self.client_from_region.clone();
                         let store_clients_clone = self.store_clients.clone();
                         let policy = self.policy.clone();
                         let bucket_clone = bucket.clone();
                         let key_clone = key.clone();
-
-                        let mut input_blobs = split_streaming_blob(data, 2); // locators.len() + 1
-                        let response_blob = input_blobs.pop();
+                        let source_region = location.tag.clone();
+                        let source_bucket = location.bucket.clone();
+                        let source_key = location.key.clone();
 
                         tokio::spawn(async move {
                             // Wrap entire background task in error handling
@@ -775,7 +776,7 @@ impl S3 for SkyProxy {
                                     key = %key_clone,
                                     target_region = %client_from_region_clone,
                                     expected_size = %expected_size,
-                                    "copy_on_read: Starting background copy to local region"
+                                    "copy_on_read: Starting background copy to local region (dual-stream approach)"
                                 );
                                 
                                 let start_upload_resp = apis::start_upload(
@@ -798,6 +799,33 @@ impl S3 for SkyProxy {
                                     &new_put_object_request(bucket_clone.clone(), key_clone.clone()),
                                     None,
                                 );
+
+                                // Fetch object independently for background copy
+                                info!(
+                                    bucket = %bucket_clone,
+                                    key = %key_clone,
+                                    source_region = %source_region,
+                                    "copy_on_read: Fetching object independently for background copy"
+                                );
+                                
+                                let source_client = store_clients_clone
+                                    .get(&source_region)
+                                    .ok_or_else(|| format!("Source client not found for region: {}", source_region))?
+                                    .clone();
+                                
+                                let background_get_resp = source_client
+                                    .get_object(S3Request::new(new_get_object_request(
+                                        source_bucket.clone(),
+                                        source_key.clone(),
+                                    )))
+                                    .await
+                                    .map_err(|e| format!("Background GET failed: {:?}", e))?;
+                                
+                                let background_data = background_get_resp.output.body
+                                    .ok_or_else(|| "No body in background GET response".to_string())?;
+                                
+                                // Split the background stream for multiple locators
+                                let input_blobs = split_streaming_blob(background_data, locators.len());
 
                                 for (locator, input_blob) in locators.into_iter().zip(input_blobs.into_iter()) {
                                     // Attempt upload with full error handling and validation
@@ -968,7 +996,7 @@ impl S3 for SkyProxy {
                         });
 
                         let response = S3Response::new(GetObjectOutput {
-                            body: Some(response_blob.unwrap()),
+                            body: Some(response_data),
                             bucket_key_enabled: get_resp.output.bucket_key_enabled,
                             content_length: get_resp.output.content_length,
                             delete_marker: get_resp.output.delete_marker,
