@@ -751,6 +751,10 @@ impl S3 for SkyProxy {
                             }))
                             .await?;
                         let data = get_resp.output.body.unwrap();
+                        
+                        // Get expected size and ETag from source for validation
+                        let expected_size = get_resp.output.content_length as u64;
+                        let source_etag = get_resp.output.e_tag.clone();
 
                         // Spawn a background task to store the object in the local object store
                         let dir_conf_clone = self.dir_conf.clone();
@@ -759,112 +763,207 @@ impl S3 for SkyProxy {
                         let policy = self.policy.clone();
                         let bucket_clone = bucket.clone();
                         let key_clone = key.clone();
-                        let bucket_log = bucket.clone();
-                        let key_log = key.clone();
 
                         let mut input_blobs = split_streaming_blob(data, 2); // locators.len() + 1
                         let response_blob = input_blobs.pop();
 
                         tokio::spawn(async move {
-                            info!(
-                                bucket = %bucket_clone,
-                                key = %key_clone,
-                                target_region = %client_from_region_clone,
-                                "copy_on_read: Starting background copy to local region"
-                            );
-                            let start_upload_resp_result = apis::start_upload(
-                                &dir_conf_clone,
-                                models::StartUploadRequest {
-                                    bucket: bucket.clone(),
-                                    key: key.clone(),
-                                    client_from_region: client_from_region_clone.clone(),
-                                    is_multipart: false,
-                                    copy_src_bucket: None,
-                                    copy_src_key: None,
-                                    policy: Some(policy.clone()),
-                                },
-                            )
-                            .await;
+                            // Wrap entire background task in error handling
+                            let result: Result<(), String> = async {
+                                info!(
+                                    bucket = %bucket_clone,
+                                    key = %key_clone,
+                                    target_region = %client_from_region_clone,
+                                    expected_size = %expected_size,
+                                    "copy_on_read: Starting background copy to local region"
+                                );
+                                
+                                let start_upload_resp = apis::start_upload(
+                                    &dir_conf_clone,
+                                    models::StartUploadRequest {
+                                        bucket: bucket_clone.clone(),
+                                        key: key_clone.clone(),
+                                        client_from_region: client_from_region_clone.clone(),
+                                        is_multipart: false,
+                                        copy_src_bucket: None,
+                                        copy_src_key: None,
+                                        policy: Some(policy.clone()),
+                                    },
+                                )
+                                .await
+                                .map_err(|e| format!("start_upload failed: {:?}", e))?;
 
-                            // In case of multi-concurrent GET request with copy_on_read policy,
-                            // only upload if start_upload returns successful, this indicates that the object is not in the local object store
-                            // status neither pending nor ready
-                            if let Ok(start_upload_resp) = start_upload_resp_result {
                                 let locators = start_upload_resp.locators;
                                 let request_template = clone_put_object_request(
                                     &new_put_object_request(bucket_clone.clone(), key_clone.clone()),
                                     None,
                                 );
 
-                                for (locator, input_blob) in
-                                    locators.into_iter().zip(input_blobs.into_iter())
-                                {
-                                    info!(
-                                        bucket = %bucket_clone,
-                                        key = %key_clone,
-                                        target_region = %locator.tag,
-                                        target_bucket = %locator.bucket,
-                                        target_key = %locator.key,
-                                        "copy_on_read: Writing object to local storage"
-                                    );
-                                    
-                                    let client: Arc<Box<dyn ObjectStoreClient>> =
-                                        store_clients_clone.get(&locator.tag).unwrap().clone();
-                                    let req = S3Request::new(clone_put_object_request(
-                                        &request_template,
-                                        Some(input_blob),
-                                    ))
-                                    .map_input(|mut input| {
-                                        input.bucket = locator.bucket.clone();
-                                        input.key = locator.key.clone();
-                                        input
-                                    });
+                                for (locator, input_blob) in locators.into_iter().zip(input_blobs.into_iter()) {
+                                    // Attempt upload with full error handling and validation
+                                    let upload_result: Result<(u64, String), String> = async {
+                                        info!(
+                                            bucket = %bucket_clone,
+                                            key = %key_clone,
+                                            target_region = %locator.tag,
+                                            target_bucket = %locator.bucket,
+                                            target_key = %locator.key,
+                                            expected_size = %expected_size,
+                                            "copy_on_read: Writing object to local storage"
+                                        );
+                                        
+                                        let client = store_clients_clone
+                                            .get(&locator.tag)
+                                            .ok_or_else(|| format!("Client not found for region: {}", locator.tag))?
+                                            .clone();
+                                        
+                                        let req = S3Request::new(clone_put_object_request(
+                                            &request_template,
+                                            Some(input_blob),
+                                        ))
+                                        .map_input(|mut input| {
+                                            input.bucket = locator.bucket.clone();
+                                            input.key = locator.key.clone();
+                                            input.content_length = Some(expected_size as i64);
+                                            input
+                                        });
 
-                                    let put_resp = client.put_object(req).await.unwrap();
-                                    let e_tag = put_resp.output.e_tag.unwrap();
-                                    let head_resp = client
-                                        .head_object(S3Request::new(new_head_object_request(
-                                            locator.bucket.clone(),
-                                            locator.key.clone(),
-                                        )))
+                                        let put_resp = client
+                                            .put_object(req)
+                                            .await
+                                            .map_err(|e| format!("PUT failed: {:?}", e))?;
+                                        
+                                        let uploaded_etag = put_resp.output.e_tag
+                                            .ok_or_else(|| "No ETag in PUT response".to_string())?;
+                                        
+                                        // Verify uploaded object with HEAD request
+                                        let head_resp = client
+                                            .head_object(S3Request::new(new_head_object_request(
+                                                locator.bucket.clone(),
+                                                locator.key.clone(),
+                                            )))
+                                            .await
+                                            .map_err(|e| format!("HEAD failed: {:?}", e))?;
+                                        
+                                        let actual_size = head_resp.output.content_length as u64;
+                                        
+                                        // SIZE VALIDATION
+                                        if actual_size != expected_size {
+                                            return Err(format!(
+                                                "Size mismatch: expected {} bytes, got {} bytes",
+                                                expected_size, actual_size
+                                            ));
+                                        }
+                                        
+                                        // CHECKSUM VALIDATION (ETag comparison)
+                                        if let Some(ref src_etag) = source_etag {
+                                            let src_clean = src_etag.trim_matches('"');
+                                            let dst_clean = uploaded_etag.trim_matches('"');
+                                            if src_clean != dst_clean {
+                                                return Err(format!(
+                                                    "ETag mismatch: expected {}, got {}",
+                                                    src_clean, dst_clean
+                                                ));
+                                            }
+                                        }
+                                        
+                                        // Complete upload in metadata store
+                                        apis::complete_upload(
+                                            &dir_conf_clone,
+                                            models::PatchUploadIsCompleted {
+                                                id: locator.id,
+                                                size: actual_size,
+                                                etag: uploaded_etag.clone(),
+                                                last_modified: timestamp_to_string(
+                                                    head_resp.output.last_modified
+                                                        .ok_or_else(|| "No last_modified in HEAD response".to_string())?,
+                                                ),
+                                                policy: Some(policy.clone()),
+                                            },
+                                        )
                                         .await
-                                        .unwrap();
+                                        .map_err(|e| format!("complete_upload failed: {:?}", e))?;
+                                        
+                                        Ok((actual_size, uploaded_etag))
+                                    }.await;
                                     
-                                    let size = head_resp.output.content_length as u64;
-                                    
-                                    apis::complete_upload(
-                                        &dir_conf_clone,
-                                        models::PatchUploadIsCompleted {
-                                            id: locator.id,
-                                            size,
-                                            etag: e_tag.clone(),
-                                            last_modified: timestamp_to_string(
-                                                head_resp.output.last_modified.unwrap(),
-                                            ),
-                                            policy: Some(policy.clone()),
-                                        },
-                                    )
-                                    .await
-                                    .unwrap();
-                                    
+                                    match upload_result {
+                                        Ok((size, etag)) => {
+                                            info!(
+                                                bucket = %bucket_clone,
+                                                key = %key_clone,
+                                                target_region = %locator.tag,
+                                                target_bucket = %locator.bucket,
+                                                target_key = %locator.key,
+                                                size = %size,
+                                                etag = %etag,
+                                                "copy_on_read: Successfully completed copy with validation"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                bucket = %bucket_clone,
+                                                key = %key_clone,
+                                                target_region = %locator.tag,
+                                                target_bucket = %locator.bucket,
+                                                target_key = %locator.key,
+                                                error = %e,
+                                                "copy_on_read: Failed to copy object, cleaning up"
+                                            );
+                                            
+                                            // Cleanup: delete corrupted/partial upload
+                                            if let Some(client) = store_clients_clone.get(&locator.tag) {
+                                                let _ = client.delete_object(S3Request::new(
+                                                    new_delete_object_request(
+                                                        locator.bucket.clone(),
+                                                        locator.key.clone()
+                                                    )
+                                                )).await;
+                                                
+                                                info!(
+                                                    bucket = %bucket_clone,
+                                                    key = %key_clone,
+                                                    target_region = %locator.tag,
+                                                    "copy_on_read: Cleaned up corrupted object"
+                                                );
+                                            }
+                                            
+                                            return Err(e);
+                                        }
+                                    }
+                                }
+                                
+                                Ok(())
+                            }.await;
+                            
+                            match result {
+                                Ok(()) => {
                                     info!(
                                         bucket = %bucket_clone,
                                         key = %key_clone,
-                                        target_region = %locator.tag,
-                                        target_bucket = %locator.bucket,
-                                        target_key = %locator.key,
-                                        size = %size,
-                                        etag = %e_tag,
-                                        "copy_on_read: Successfully completed copy to local region"
+                                        target_region = %client_from_region_clone,
+                                        "copy_on_read: Background copy completed successfully"
                                     );
                                 }
-                            } else {
-                                info!(
-                                    bucket = %bucket_clone,
-                                    key = %key_clone,
-                                    target_region = %client_from_region_clone,
-                                    "copy_on_read: Object already exists in local region or upload in progress, skipping copy"
-                                );
+                                Err(e) => {
+                                    // Check if it's the "already exists" case
+                                    if e.contains("start_upload failed") && e.contains("409") {
+                                        info!(
+                                            bucket = %bucket_clone,
+                                            key = %key_clone,
+                                            target_region = %client_from_region_clone,
+                                            "copy_on_read: Object already exists in local region, skipping copy"
+                                        );
+                                    } else {
+                                        error!(
+                                            bucket = %bucket_clone,
+                                            key = %key_clone,
+                                            target_region = %client_from_region_clone,
+                                            error = %e,
+                                            "copy_on_read: Background copy failed"
+                                        );
+                                    }
+                                }
                             }
                         });
 
@@ -879,8 +978,8 @@ impl S3 for SkyProxy {
                             ..Default::default()
                         });
                         info!(
-                            bucket = %bucket_log,
-                            key = %key_log,
+                            bucket = %bucket,
+                            key = %key,
                             content_length = ?response.output.content_length,
                             "Exiting get_object: copy_on_read from remote region"
                         );

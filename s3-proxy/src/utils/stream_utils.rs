@@ -1,91 +1,172 @@
 use std::pin::Pin;
-
-use flo_stream::MessagePublisher;
+use bytes::Bytes;
 use s3s::dto::StreamingBlob;
-
 use s3s::stream::ByteStream;
 use s3s::stream::RemainingLength;
-
+use tokio::sync::mpsc;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::{debug, error, info};
 
-/// A wrapper around a stream that transforms its items into `Result<T, Box<dyn std::error::Error + Send + Sync>>`.
-struct WrapToResultStream<S, T>
+/// A wrapper around a stream that adds ByteStream trait with size hint
+struct StreamWithSizeHint<S>
 where
-    S: Stream<Item = T> + Unpin,
+    S: Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Unpin,
 {
     inner: S,
-    size_hint: RemainingLength,
+    size_hint: Option<usize>,
 }
 
-impl<S, T> WrapToResultStream<S, T>
+impl<S> StreamWithSizeHint<S>
 where
-    S: Stream<Item = T> + Unpin,
+    S: Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Unpin,
 {
-    fn new(inner: S, size_hint: RemainingLength) -> Self {
+    fn new(inner: S, size_hint: Option<usize>) -> Self {
         Self { inner, size_hint }
     }
 }
 
-impl<S, T> tokio_stream::Stream for WrapToResultStream<S, T>
+impl<S> Stream for StreamWithSizeHint<S>
 where
-    S: Stream<Item = T> + Unpin,
+    S: Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Unpin,
 {
-    type Item = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+    type Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
     fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let result = Pin::new(&mut self.inner).poll_next(cx);
-        match result {
-            std::task::Poll::Ready(Some(item)) => std::task::Poll::Ready(Some(Ok(item))),
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
+        Pin::new(&mut self.inner).poll_next(cx)
+    }
+}
+
+impl<S> ByteStream for StreamWithSizeHint<S>
+where
+    S: Stream<Item = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Unpin,
+{
+    fn remaining_length(&self) -> RemainingLength {
+        match self.size_hint {
+            Some(size) => RemainingLength::new_exact(size),
+            None => RemainingLength::new_exact(0),
         }
     }
 }
 
-impl<S, T> s3s::stream::ByteStream for WrapToResultStream<S, T>
-where
-    S: Stream<Item = T> + Unpin,
-{
-    fn remaining_length(&self) -> s3s::stream::RemainingLength {
-        s3s::stream::RemainingLength::new_exact(self.size_hint.exact().unwrap())
-    }
-}
-
+/// Split a streaming blob into multiple independent streams using channels.
+/// This is a robust implementation that handles errors properly and works for all object sizes.
 pub fn split_streaming_blob(incoming: StreamingBlob, num_splits: usize) -> Vec<StreamingBlob> {
-    // Effectively an unbounded buffer.
-    let mut publisher = flo_stream::Publisher::new(usize::MAX);
-
-    // size_hint is required so the S3 client can set content length header properly.
-    // that's why we just need it once in the beginning and keep it static.
-    let hint = incoming.remaining_length();
-    // println!("hint: {:?}", hint);
-
-    let mut result: Vec<StreamingBlob> = Vec::new();
-    for _ in 0..num_splits {
-        let sub = publisher.subscribe();
-        let stream =
-            WrapToResultStream::new(sub, RemainingLength::new_exact(hint.exact().unwrap()));
-        // let boxed: Box< dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
-        //         + Send,
-        // > = Box::new(stream);
-        // let sub_blob = StreamingBlob::from(Body::from(hyper::Body::from(boxed)));
-        let sub_blob = StreamingBlob::new(stream);
-        result.push(sub_blob);
+    // Optimization: if no splitting needed, return original stream
+    if num_splits == 0 {
+        return vec![];
     }
-
-    // TODO: make return a JoinHandle if caller needs it.
+    
+    if num_splits == 1 {
+        debug!("No splitting needed, returning original stream");
+        return vec![incoming];
+    }
+    
+    debug!("Splitting stream into {} copies", num_splits);
+    
+    // Get size hint from incoming stream and extract the exact value if available
+    let size_hint_value = incoming.remaining_length().exact();
+    
+    // Create channels for each split
+    let mut senders = Vec::new();
+    let mut result = Vec::new();
+    
+    for i in 0..num_splits {
+        let (tx, rx) = mpsc::unbounded_channel();
+        senders.push(tx);
+        
+        // Wrap receiver in a stream with proper size hint
+        let stream = UnboundedReceiverStream::new(rx);
+        let wrapped = StreamWithSizeHint::new(stream, size_hint_value);
+        let blob = StreamingBlob::new(wrapped);
+        result.push(blob);
+        
+        debug!("Created stream split {}/{}", i + 1, num_splits);
+    }
+    
+    // Spawn task to read from source and broadcast to all subscribers
     tokio::spawn(async move {
-        // doing this because Error is not clonable.
-        let infallable_blob = incoming.map(|res| res.unwrap());
-        let stream_publisher = flo_stream::StreamPublisher::new(&mut publisher, infallable_blob);
-        stream_publisher.await;
-        drop(publisher);
+        let mut stream = incoming;
+        let mut total_bytes = 0u64;
+        let mut chunk_count = 0u64;
+        
+        info!("Starting stream broadcast to {} subscribers", num_splits);
+        
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    let chunk_size = chunk.len();
+                    total_bytes += chunk_size as u64;
+                    chunk_count += 1;
+                    
+                    // Send to all subscribers
+                    let mut failed_senders = Vec::new();
+                    for (idx, sender) in senders.iter().enumerate() {
+                        if let Err(e) = sender.send(Ok(chunk.clone())) {
+                            error!(
+                                "Failed to send chunk {} ({} bytes) to subscriber {}: {:?}",
+                                chunk_count, chunk_size, idx, e
+                            );
+                            failed_senders.push(idx);
+                        }
+                    }
+                    
+                    // If any sender failed, subscribers have disconnected
+                    if !failed_senders.is_empty() {
+                        error!(
+                            "Subscribers {:?} disconnected after {} bytes, aborting broadcast",
+                            failed_senders, total_bytes
+                        );
+                        
+                        // Send error to remaining subscribers
+                        for (idx, sender) in senders.iter().enumerate() {
+                            if !failed_senders.contains(&idx) {
+                                let _ = sender.send(Err(Box::new(std::io::Error::new(
+                                    std::io::ErrorKind::BrokenPipe,
+                                    "One or more subscribers disconnected"
+                                ))));
+                            }
+                        }
+                        break;
+                    }
+                    
+                    if chunk_count % 100 == 0 {
+                        debug!(
+                            "Broadcast progress: {} chunks, {} bytes to {} subscribers",
+                            chunk_count, total_bytes, num_splits
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Stream error after {} bytes ({} chunks): {:?}",
+                        total_bytes, chunk_count, e
+                    );
+                    
+                    // Send error to all subscribers
+                    for sender in &senders {
+                        let _ = sender.send(Err(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Source stream error: {:?}", e)
+                        ))));
+                    }
+                    break;
+                }
+            }
+        }
+        
+        info!(
+            "Stream broadcast completed: {} bytes in {} chunks to {} subscribers",
+            total_bytes, chunk_count, num_splits
+        );
+        
+        // Channels will be closed when senders are dropped
     });
-
+    
     result
 }
 
