@@ -76,9 +76,9 @@ def init(
         "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         "LOCAL": str(local_test).lower(),
         "LOCAL_SERVER": str(start_server).lower(),
-        "POLICY": policy,
+        "POLICY": config.get("policy", policy),
         "SKYSTORE_BUCKET_PREFIX": skystore_bucket_prefix,
-        "SERVER_ADDR": server_addr,
+        "SERVER_ADDR": config.get("server_addr", server_addr),
         "CUSTOM_ENDPOINTS": json.dumps(custom_endpoints),
     }
     env = {k: v for k, v in env.items() if v is not None}
