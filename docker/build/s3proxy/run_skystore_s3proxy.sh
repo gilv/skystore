@@ -18,7 +18,7 @@ echo "$S3_CFG" | base64 -d > $HOME/.aws/config
 # Write the s3-proxy configuration
 echo "$SKYSTORE_S3P_CFG" | base64 -d > /skystore/config.json
 
-cd /skystore/skystore/s3-proxy
+cd /skystore/s3-proxy
 
 # Set up SSH tunnel - skystore server address must be specified and valid
 echo "Setting up SSH tunnel[s] to SkyStore server"

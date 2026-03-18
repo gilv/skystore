@@ -24,15 +24,14 @@ Before deploying containers (either Docker or K8s) you need to have the containe
 * `skystore-server` - is the skystore metadata server
 * `skystore-s3proxy` - is the skystore s3-proxy that facilitates S3 access to clients
 
-If you don't have those images (locally or in a remote registry), then you need to prepare them locally first using `docker`. You should clone the skystore repo, `cd` to the repo root, and proceed with the commands below
+If you don't have those images (locally or in a remote registry), then you need to prepare them locally first using `docker`. You should clone the skystore repo, `cd` to the repo root, and proceed with the commands below. Before invoking the `build_all.sh` script, you might want to edit it and enable some features, such as custom tags, multi-architecture build (using `docker buildx build`), etc.
 ```bash
-cd docker/build
-./build_all.sh
+docker/build/build_all.sh
 ```
 This should create the images locally in your machine. You should see the images by running `docker images`.
 
 If all you want is to test SkyStore in containers locally using `docker` (see below), then having the images locally is enough. If you want to deploy in one or more remote clusters and/or use K8s, then you also need to push the images to a registry that is accessible to all your deployment locations. For example, you can use docker.io, quay.io, or custom docker registries.
-To push the images to a given registry, you need to tag them first by adding the registry's prefix and then push. Assuming your current folder is repo root and that you have logged in with `docker` to your account in the registry, run the following commands:
+To push the images to a given registry, you need to tag them first by adding the registry's prefix and then push. You may have done so already by customiing `build_all.sh`. If you haven't, assuming your current folder is repo root and that you have logged in with `docker` to your account in the registry, run the following commands:
 ```bash
 cd docker/build
 ./tag_all.sh <registry prefix>

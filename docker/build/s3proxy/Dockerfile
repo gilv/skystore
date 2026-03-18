@@ -13,7 +13,7 @@ ENV SKY_ACCESS_KEY_ID=""
 ENV SKY_SECRET_ACCESS_KEY=""
 
 # Copy the script to execute the service
-COPY run_skystore_s3proxy.sh /skystore
+COPY docker/build/s3proxy/run_skystore_s3proxy.sh /skystore
 RUN chmod +x /skystore/run_skystore_s3proxy.sh
 
 # S3 service port

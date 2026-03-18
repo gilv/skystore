@@ -7,8 +7,7 @@ RUN apt-get update \
 
 # Install Sky Store
 WORKDIR /skystore
-COPY install_skystore.sh .
-RUN chmod +x /skystore/install_skystore.sh
-RUN /skystore/install_skystore.sh
+COPY . .
+RUN /skystore/docker/build/base/build_skystore.sh
 
 
