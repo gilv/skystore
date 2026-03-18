@@ -15,6 +15,7 @@ use skystore_rust_client::models;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::sync::Semaphore;
 use tracing::{error, info};
 
 pub struct SkyProxy {
@@ -24,6 +25,7 @@ pub struct SkyProxy {
     pub policy: String,
     pub skystore_bucket_prefix: String,
     pub server_addr: String,
+    pub copy_semaphore: Arc<Semaphore>,
 }
 
 impl SkyProxy {
@@ -198,6 +200,7 @@ impl SkyProxy {
             policy,
             skystore_bucket_prefix,
             server_addr,
+            copy_semaphore: Arc::new(Semaphore::new(1)),
         }
     }
 }
@@ -211,6 +214,7 @@ impl Clone for SkyProxy {
             skystore_bucket_prefix: self.skystore_bucket_prefix.clone(),
             policy: self.policy.clone(),
             server_addr: self.server_addr.clone(),
+            copy_semaphore: self.copy_semaphore.clone(),
         }
     }
 }
@@ -767,8 +771,18 @@ impl S3 for SkyProxy {
                         let source_region = location.tag.clone();
                         let source_bucket = location.bucket.clone();
                         let source_key = location.key.clone();
+                        let copy_semaphore = self.copy_semaphore.clone();
 
                         tokio::spawn(async move {
+                            // Acquire semaphore permit - blocks if another copy is in progress
+                            let _permit = copy_semaphore.acquire().await.unwrap();
+                            
+                            info!(
+                                bucket = %bucket_clone,
+                                key = %key_clone,
+                                "copy_on_read: Acquired semaphore, starting background copy"
+                            );
+                            
                             // Wrap entire background task in error handling
                             let result: Result<(), String> = async {
                                 info!(
@@ -993,6 +1007,13 @@ impl S3 for SkyProxy {
                                     }
                                 }
                             }
+                            
+                            // Permit is automatically released when _permit is dropped
+                            info!(
+                                bucket = %bucket_clone,
+                                key = %key_clone,
+                                "copy_on_read: Released semaphore"
+                            );
                         });
 
                         let response = S3Response::new(GetObjectOutput {
